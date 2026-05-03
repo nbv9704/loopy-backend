@@ -8,26 +8,24 @@ import { config } from '../config'
  * Extracted from index.ts to follow Single Responsibility Principle
  */
 export function setupStaticServing(app: Express): void {
-  if (config.nodeEnv === 'production') {
-    const frontendBuildPath = path.join(__dirname, '..', '..', '..', 'dist')
-
-    // Serve static files from the unified frontend build
-    app.use(express.static(frontendBuildPath))
-
-    // Catch-all route for SPA - must be after API routes
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(frontendBuildPath, 'index.html'))
+  // Since the frontend is now hosted on Vercel, the backend no longer serves static files.
+  // We replace the SPA catch-all with a simple health check endpoint for UptimeRobot.
+  app.get('/', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Loopy Backend API is running successfully',
+      timestamp: new Date().toISOString(),
     })
-  } else {
-    // 404 handler for development (when frontend runs separately)
-    app.use((_req, res) => {
-      res.status(404).json({
-        success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Endpoint not found',
-        },
-      })
+  })
+
+  // 404 handler for undefined API routes
+  app.use((_req, res) => {
+    res.status(404).json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Endpoint not found',
+      },
     })
-  }
+  })
 }
