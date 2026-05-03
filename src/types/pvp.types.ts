@@ -223,6 +223,10 @@ export interface ServerToClientEvents {
       rank: number
     }>
   }) => void
+  'match:cooldown': (payload: {
+    matchId: string
+    secondsRemaining: number
+  }) => void
 
   // Participant updates
   'participant:joined': (participant: PvPParticipant) => void
