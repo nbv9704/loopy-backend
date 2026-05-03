@@ -1,6 +1,7 @@
 import { Options } from 'swagger-jsdoc'
 import { config } from './index'
 import { generateSchemasFromZod } from '../utils/swaggerHelpers'
+import { openApiPaths } from './openapi-paths'
 
 export const swaggerOptions: Options = {
   definition: {
@@ -216,6 +217,14 @@ export const swaggerOptions: Options = {
         description: 'Administrative operations (requires admin role)',
       },
     ],
+    // Add manual paths
+    paths: openApiPaths,
   },
-  apis: ['./src/routes/*.routes.ts'],
+  apis: [
+    './src/routes/*.routes.ts',
+    './src/routes/*.ts',
+    './src/controllers/*.ts',
+    './dist/routes/*.js',
+    './dist/controllers/*.js',
+  ],
 }
