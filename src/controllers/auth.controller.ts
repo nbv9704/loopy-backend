@@ -74,7 +74,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
         email,
         password,
       })
-      
+
       if (signInError) {
         logger.error('Failed to sign in after signup:', signInError)
       } else {

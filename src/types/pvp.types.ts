@@ -181,23 +181,11 @@ export interface ClientToServerEvents {
   'match:ready': (matchId: string) => void
 
   // Submissions
-  'submission:answer': (payload: {
-    matchId: string
-    questionId: string
-    answer: string
-  }) => void
-  'submission:code': (payload: {
-    matchId: string
-    questionId: string
-    code: string
-  }) => void
+  'submission:answer': (payload: { matchId: string; questionId: string; answer: string }) => void
+  'submission:code': (payload: { matchId: string; questionId: string; code: string }) => void
 
   // Reactions
-  'reaction:send': (payload: {
-    matchId: string
-    emoji: string
-    targetUserId?: string
-  }) => void
+  'reaction:send': (payload: { matchId: string; emoji: string; targetUserId?: string }) => void
 
   // Typing indicator (for code challenges)
   'typing:start': (matchId: string) => void
@@ -253,7 +241,7 @@ export interface ServerToClientEvents {
   'typing:user_stopped': (payload: { userId: string }) => void
 
   // Errors
-  'error': (error: { message: string; code?: string }) => void
+  error: (error: { message: string; code?: string }) => void
 }
 
 // Inter-server events (for scaling)

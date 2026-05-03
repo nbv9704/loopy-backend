@@ -159,10 +159,7 @@ export const pvpSchemas = {
         data => {
           if (data.type === 'multiple_choice') {
             return (
-              data.question_text &&
-              data.options &&
-              data.options.length >= 2 &&
-              data.correct_answer
+              data.question_text && data.options && data.options.length >= 2 && data.correct_answer
             )
           }
           return true

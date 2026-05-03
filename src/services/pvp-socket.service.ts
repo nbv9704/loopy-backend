@@ -17,7 +17,12 @@ import type {
 } from '../types/pvp.types'
 
 export class PvPSocketService {
-  private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>
+  private io: SocketIOServer<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  >
   private matchTimers: Map<string, NodeJS.Timeout> = new Map()
 
   constructor(httpServer: HTTPServer) {
@@ -66,35 +71,43 @@ export class PvPSocketService {
    * Setup event handlers
    */
   private setupEventHandlers(): void {
-    this.io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>) => {
-      const userId = socket.data.userId
-      logger.info(`User connected: ${userId} (${socket.id})`)
+    this.io.on(
+      'connection',
+      (
+        socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>
+      ) => {
+        const userId = socket.data.userId
+        logger.info(`User connected: ${userId} (${socket.id})`)
 
-      // Match lifecycle events
-      socket.on('match:join', (matchId) => this.handleMatchJoin(socket, matchId))
-      socket.on('match:leave', (matchId) => this.handleMatchLeave(socket, matchId))
-      socket.on('match:ready', (matchId) => this.handleMatchReady(socket, matchId))
+        // Match lifecycle events
+        socket.on('match:join', matchId => this.handleMatchJoin(socket, matchId))
+        socket.on('match:leave', matchId => this.handleMatchLeave(socket, matchId))
+        socket.on('match:ready', matchId => this.handleMatchReady(socket, matchId))
 
-      // Submission events
-      socket.on('submission:answer', (payload) => this.handleSubmitAnswer(socket, payload))
-      socket.on('submission:code', (payload) => this.handleSubmitCode(socket, payload))
+        // Submission events
+        socket.on('submission:answer', payload => this.handleSubmitAnswer(socket, payload))
+        socket.on('submission:code', payload => this.handleSubmitCode(socket, payload))
 
-      // Reaction events
-      socket.on('reaction:send', (payload) => this.handleSendReaction(socket, payload))
+        // Reaction events
+        socket.on('reaction:send', payload => this.handleSendReaction(socket, payload))
 
-      // Typing indicators
-      socket.on('typing:start', (matchId) => this.handleTypingStart(socket, matchId))
-      socket.on('typing:stop', (matchId) => this.handleTypingStop(socket, matchId))
+        // Typing indicators
+        socket.on('typing:start', matchId => this.handleTypingStart(socket, matchId))
+        socket.on('typing:stop', matchId => this.handleTypingStop(socket, matchId))
 
-      // Disconnect
-      socket.on('disconnect', () => this.handleDisconnect(socket))
-    })
+        // Disconnect
+        socket.on('disconnect', () => this.handleDisconnect(socket))
+      }
+    )
   }
 
   /**
    * Handle user joining a match
    */
-  private async handleMatchJoin(socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>, matchIdOrCode: string): Promise<void> {
+  private async handleMatchJoin(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    matchIdOrCode: string
+  ): Promise<void> {
     try {
       const userId = socket.data.userId!
 
@@ -118,12 +131,12 @@ export class PvPSocketService {
       if (!existingParticipant) {
         logger.info(`User ${userId} not in match yet, joining...`)
         participant = await pvpService.joinMatch(matchId, userId)
-        
+
         // Notify all participants about new join
         this.io.to(matchId).emit('participant:joined', participant)
       } else {
         logger.info(`User ${userId} already in match, just connecting socket`)
-        
+
         // Update connection status
         await supabaseAdmin
           .from('pvp_participants')
@@ -150,7 +163,10 @@ export class PvPSocketService {
   /**
    * Handle user leaving a match
    */
-  private async handleMatchLeave(socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>, matchId: string): Promise<void> {
+  private async handleMatchLeave(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    matchId: string
+  ): Promise<void> {
     try {
       const userId = socket.data.userId!
 
@@ -178,7 +194,10 @@ export class PvPSocketService {
   /**
    * Handle user marking ready
    */
-  private async handleMatchReady(socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>, matchId: string): Promise<void> {
+  private async handleMatchReady(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    matchId: string
+  ): Promise<void> {
     try {
       const userId = socket.data.userId!
 
@@ -288,7 +307,7 @@ export class PvPSocketService {
   private async endQuestion(matchId: string): Promise<void> {
     try {
       logger.info(`[endQuestion] Starting for match ${matchId}`)
-      
+
       // Clear timer
       const timer = this.matchTimers.get(matchId)
       if (timer) {
@@ -310,19 +329,23 @@ export class PvPSocketService {
       }
 
       const nextIndex = match.current_question_index + 1
-      logger.info(`[endQuestion] Match ${matchId}: current=${match.current_question_index}, next=${nextIndex}, total=${match.question_ids.length}`)
+      logger.info(
+        `[endQuestion] Match ${matchId}: current=${match.current_question_index}, next=${nextIndex}, total=${match.question_ids.length}`
+      )
 
       // Check if more questions
       if (nextIndex < match.question_ids.length) {
-        logger.info(`[endQuestion] Entering cooldown before next question (${nextIndex}/${match.question_ids.length})`)
-        
+        logger.info(
+          `[endQuestion] Entering cooldown before next question (${nextIndex}/${match.question_ids.length})`
+        )
+
         // Notify clients about the cooldown
         this.io.to(matchId).emit('match:cooldown', {
           duration: 3,
           isMatchOver: false,
           nextQuestionIndex: nextIndex,
         })
-        
+
         // Wait 3 seconds
         setTimeout(async () => {
           try {
@@ -338,14 +361,16 @@ export class PvPSocketService {
           }
         }, 3000)
       } else {
-        logger.info(`[endQuestion] No more questions, entering cooldown before completing match ${matchId}`)
-        
+        logger.info(
+          `[endQuestion] No more questions, entering cooldown before completing match ${matchId}`
+        )
+
         // Notify clients about the final cooldown before showing results
         this.io.to(matchId).emit('match:cooldown', {
           duration: 3,
           isMatchOver: true,
         })
-        
+
         // Wait 3 seconds
         setTimeout(async () => {
           try {
@@ -366,7 +391,7 @@ export class PvPSocketService {
   private async completeMatch(matchId: string): Promise<void> {
     try {
       logger.info(`[completeMatch] Starting for match ${matchId}`)
-      
+
       // Get participants with scores (without join)
       const { data: participants, error: participantsError } = await supabaseAdmin
         .from('pvp_participants')
@@ -406,7 +431,7 @@ export class PvPSocketService {
           currentRank = index + 1
         }
         previousScore = score
-        
+
         return {
           userId: p.user_id,
           displayName: profileMap.get(p.user_id) || 'Anonymous',
@@ -436,7 +461,9 @@ export class PvPSocketService {
         return
       }
 
-      logger.info(`[completeMatch] Updated match status to completed, winner: ${isDraw ? 'DRAW' : firstPlaceWinners[0].userId}`)
+      logger.info(
+        `[completeMatch] Updated match status to completed, winner: ${isDraw ? 'DRAW' : firstPlaceWinners[0].userId}`
+      )
 
       // Update participant ranks
       for (const p of rankedParticipants) {
@@ -518,12 +545,16 @@ export class PvPSocketService {
       const participantCount = participants?.length || 0
       const submissionCount = submissions?.length || 0
 
-      logger.info(`Submissions: ${submissionCount}/${participantCount} for question ${payload.questionId}`)
+      logger.info(
+        `Submissions: ${submissionCount}/${participantCount} for question ${payload.questionId}`
+      )
 
       // If all participants submitted, end question immediately
       if (submissionCount >= participantCount) {
-        logger.info(`All participants submitted for question ${payload.questionId}, ending round...`)
-        
+        logger.info(
+          `All participants submitted for question ${payload.questionId}, ending round...`
+        )
+
         // Clear existing timer
         const timer = this.matchTimers.get(payload.matchId)
         if (timer) {
@@ -593,12 +624,16 @@ export class PvPSocketService {
       const participantCount = participants?.length || 0
       const submissionCount = submissions?.length || 0
 
-      logger.info(`Code submissions: ${submissionCount}/${participantCount} for question ${payload.questionId}`)
+      logger.info(
+        `Code submissions: ${submissionCount}/${participantCount} for question ${payload.questionId}`
+      )
 
       // If all participants submitted, end question immediately
       if (submissionCount >= participantCount) {
-        logger.info(`All participants submitted code for question ${payload.questionId}, ending round...`)
-        
+        logger.info(
+          `All participants submitted code for question ${payload.questionId}, ending round...`
+        )
+
         // Clear existing timer
         const timer = this.matchTimers.get(payload.matchId)
         if (timer) {
@@ -665,7 +700,10 @@ export class PvPSocketService {
   /**
    * Handle typing start
    */
-  private async handleTypingStart(socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>, matchId: string): Promise<void> {
+  private async handleTypingStart(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    matchId: string
+  ): Promise<void> {
     const userId = socket.data.userId!
 
     // Get user info
@@ -685,7 +723,10 @@ export class PvPSocketService {
   /**
    * Handle typing stop
    */
-  private handleTypingStop(socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>, matchId: string): void {
+  private handleTypingStop(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    matchId: string
+  ): void {
     const userId = socket.data.userId!
 
     // Broadcast to others in match
@@ -695,7 +736,9 @@ export class PvPSocketService {
   /**
    * Handle disconnect
    */
-  private async handleDisconnect(socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>): Promise<void> {
+  private async handleDisconnect(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>
+  ): Promise<void> {
     const userId = socket.data.userId
     const matchId = socket.data.matchId
 
@@ -717,7 +760,12 @@ export class PvPSocketService {
   /**
    * Get Socket.IO instance
    */
-  public getIO(): SocketIOServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData> {
+  public getIO(): SocketIOServer<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  > {
     return this.io
   }
 }

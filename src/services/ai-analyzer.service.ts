@@ -207,7 +207,14 @@ export class AIAnalyzerService {
       this.dailyRequestCount++
       this.dailyTokenCount += estimatedTokens
 
-      await this.logUsage(null, estimatedTokens, estimatedTokens, estimatedTokens * 2, false, responseTime)
+      await this.logUsage(
+        null,
+        estimatedTokens,
+        estimatedTokens,
+        estimatedTokens * 2,
+        false,
+        responseTime
+      )
 
       if (this.dailyTokenCount > this.MAX_TOKENS_PER_DAY * this.WARNING_THRESHOLD) {
         logger.warn('AI token usage approaching daily limit', {

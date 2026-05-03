@@ -85,7 +85,8 @@ function computeBaseScore(diff: CodeDiff, params: AIAnalysisParams): number {
     return 75
   }
 
-  const actual = params.code.split('\n')
+  const actual = params.code
+    .split('\n')
     .filter(l => l.trim().length > 0 && !l.trim().startsWith('//'))
   const n = actual.length
   if (n === 0) return 5
@@ -108,7 +109,11 @@ interface CodeDiff {
 }
 
 function computeCodeDiff(starter: string, submitted: string): CodeDiff {
-  const norm = (s: string) => s.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  const norm = (s: string) =>
+    s
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0)
   const starterLines = norm(starter)
   const submittedLines = norm(submitted)
 
@@ -132,7 +137,7 @@ function computeCodeDiff(starter: string, submitted: string): CodeDiff {
     submittedLineCount: submittedLines.length,
     addedLines,
     unchangedCount,
-    changePercent: submittedLines.length > 0
-      ? Math.round((addedLines.length / submittedLines.length) * 100) : 0,
+    changePercent:
+      submittedLines.length > 0 ? Math.round((addedLines.length / submittedLines.length) * 100) : 0,
   }
 }

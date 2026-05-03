@@ -64,7 +64,9 @@ export const pvpService = {
       }
 
       if (questions.length < config.question_count) {
-        logger.warn(`Only ${questions.length} questions available, but ${config.question_count} requested`)
+        logger.warn(
+          `Only ${questions.length} questions available, but ${config.question_count} requested`
+        )
       }
 
       logger.info(`Found ${questions.length} questions, selecting ${config.question_count}`)
@@ -72,10 +74,10 @@ export const pvpService = {
       // Fisher-Yates shuffle to ensure no duplicates
       const shuffled = [...questions]
       for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
       }
-      
+
       // Take only the number of questions needed (no duplicates possible)
       const selectedQuestions = shuffled.slice(0, config.question_count)
       const questionIds = selectedQuestions.map(q => q.id)
@@ -86,14 +88,14 @@ export const pvpService = {
       let roomCode = generateRoomCode()
       let isUnique = false
       let attempts = 0
-      
+
       while (!isUnique && attempts < 5) {
         const { data: existing } = await supabaseAdmin
           .from('pvp_matches')
           .select('id')
           .eq('room_code', roomCode)
           .single()
-          
+
         if (!existing) {
           isUnique = true
         } else {
@@ -136,14 +138,14 @@ export const pvpService = {
    */
   async getMatch(matchIdOrCode: string): Promise<PvPMatch & { participants: PvPParticipant[] }> {
     const isRoomCode = matchIdOrCode.length === 6
-    
+
     let query = supabaseAdmin.from('pvp_matches').select('*')
     if (isRoomCode) {
       query = query.eq('room_code', matchIdOrCode.toUpperCase())
     } else {
       query = query.eq('id', matchIdOrCode)
     }
-    
+
     const { data: match, error: matchError } = await query.single()
 
     if (matchError || !match) {
@@ -417,7 +419,7 @@ export const pvpService = {
     if (question.type === 'true_false') {
       basePoints = 30
     }
-    
+
     let pointsEarned = 0
     if (isCorrect) {
       pointsEarned = basePoints
@@ -511,12 +513,12 @@ export const pvpService = {
     const testResults = await this.runTestCases(code, question.test_cases || [])
     const passedCount = testResults.filter(r => r.passed).length
     const totalCount = testResults.length
-    
+
     // Calculate score based on test case pass rate
     // If no test cases, consider it incorrect (0 points)
     let baseScore = 0
     let isCorrect = false
-    
+
     if (totalCount > 0) {
       // Score = (passed / total) * 100
       baseScore = Math.round((passedCount / totalCount) * 100)

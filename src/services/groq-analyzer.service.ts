@@ -29,8 +29,13 @@ interface ModelConfig {
 
 const MODELS: Record<string, ModelConfig> = {
   '8b': { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B', dailyLimit: 14400, rpm: 30 },
-  'scout': { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B', dailyLimit: 1000, rpm: 30 },
-  'qwen': { id: 'qwen/qwen3-32b', label: 'Qwen 3 32B', dailyLimit: 1000, rpm: 60 },
+  scout: {
+    id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    label: 'Llama 4 Scout 17B',
+    dailyLimit: 1000,
+    rpm: 30,
+  },
+  qwen: { id: 'qwen/qwen3-32b', label: 'Qwen 3 32B', dailyLimit: 1000, rpm: 60 },
   '70b': { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', dailyLimit: 1000, rpm: 30 },
 }
 
@@ -94,7 +99,9 @@ export class GroqAnalyzerService {
 
       // Skip if quota exceeded for this model
       if (this.quotas[modelKey] >= model.dailyLimit) {
-        logger.warn(`Groq ${model.label} quota exceeded (${this.quotas[modelKey]}/${model.dailyLimit}), trying next`)
+        logger.warn(
+          `Groq ${model.label} quota exceeded (${this.quotas[modelKey]}/${model.dailyLimit}), trying next`
+        )
         continue
       }
 
@@ -117,7 +124,12 @@ export class GroqAnalyzerService {
   /**
    * Call a specific Groq model
    */
-  private async callModel(model: ModelConfig, prompt: string, exerciseTitle: string, depth: string = 'quick'): Promise<AIAnalysis> {
+  private async callModel(
+    model: ModelConfig,
+    prompt: string,
+    exerciseTitle: string,
+    depth: string = 'quick'
+  ): Promise<AIAnalysis> {
     const startTime = Date.now()
     const maxTokens = MODE_MAX_TOKENS[depth] || 512
 

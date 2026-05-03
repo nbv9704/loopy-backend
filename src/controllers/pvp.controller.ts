@@ -50,7 +50,9 @@ export const getMatch = async (req: AuthRequest, res: Response, next: NextFuncti
 
     const match = await pvpService.getMatch(matchId)
 
-    logger.info(`Match found: ${match.id} Status: ${match.status} Participants: ${match.participants?.length}`)
+    logger.info(
+      `Match found: ${match.id} Status: ${match.status} Participants: ${match.participants?.length}`
+    )
 
     res.json({
       success: true,
@@ -123,15 +125,15 @@ export const findMatch = async (req: AuthRequest, res: Response, next: NextFunct
     try {
       const participant = await pvpService.joinMatch(match.id, userId)
       logger.info('User joined match successfully')
-      
+
       // Check if this is a new join (not the match creator)
       const { data: allParticipants } = await supabaseAdmin
         .from('pvp_participants')
         .select('user_id')
         .eq('match_id', match.id)
-      
+
       isNewJoin = (allParticipants?.length || 0) > 1
-      
+
       // If new join, emit socket event to notify other participants
       if (isNewJoin) {
         const io = (req.app as any).get('io')

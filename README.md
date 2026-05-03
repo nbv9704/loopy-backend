@@ -173,18 +173,21 @@ Authorization: Bearer <your_jwt_token>
 ### Key Endpoints
 
 #### Code Execution
+
 ```
 POST /api/execute
 Body: { code: string, language: string }
 ```
 
 #### Grading
+
 ```
 POST /api/grading/exercises/:exerciseId/submit
 Body: { code: string, language: string }
 ```
 
 #### User Progress
+
 ```
 GET /api/progress
 ```
@@ -295,6 +298,7 @@ docker run -p 3000:3000 --env-file .env loopy-backend
 ### Logs
 
 Logs are stored in `logs/` directory:
+
 - `combined.log`: All logs
 - `error.log`: Error logs only
 
