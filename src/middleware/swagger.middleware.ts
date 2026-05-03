@@ -96,9 +96,12 @@ export function setupSwagger(app: Express): void {
       res.send(yaml.dump(swaggerSpec))
     })
 
-    // Apply environment-specific access control (requireAdmin in production)
+    // Apply access control based on SWAGGER_REQUIRE_AUTH config
+    // In production, only require auth if explicitly enabled
     const accessControl: Array<(req: AuthRequest, res: Response, next: NextFunction) => void> =
-      config.nodeEnv === 'production' ? [requireAdmin, logDocumentationAccess] : []
+      config.nodeEnv === 'production' && process.env.SWAGGER_REQUIRE_AUTH === 'true'
+        ? [requireAdmin, logDocumentationAccess]
+        : []
 
     // Configure Swagger UI with custom options
     const swaggerUiOptions = {
