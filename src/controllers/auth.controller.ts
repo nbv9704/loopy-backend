@@ -42,12 +42,15 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 
     if (authError) {
       logger.error('Supabase signup error:', authError)
-      throw new Error(authError.message)
+      return next(errors.validationError(authError.message))
     }
 
     if (!authData.user) {
-      throw new Error('Failed to create user')
+      logger.error('No user data returned from Supabase')
+      return next(errors.validationError('Failed to create user'))
     }
+
+    logger.info('User created in auth:', authData.user.id)
 
     // Create user profile
     const { error: profileError } = await supabaseAdmin.from('user_profiles').insert({
@@ -58,16 +61,26 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
 
     if (profileError) {
       logger.error('Failed to create user profile:', profileError)
+      // Don't fail signup if profile creation fails, we can create it later
+    } else {
+      logger.info('User profile created:', authData.user.id)
     }
 
     // For development with admin.createUser, we need to sign in to get a session
     let session = null
     if (isDevelopment) {
-      const { data: signInData } = await supabase.auth.signInWithPassword({
+      logger.info('Signing in user for session:', email)
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
-      session = signInData?.session
+      
+      if (signInError) {
+        logger.error('Failed to sign in after signup:', signInError)
+      } else {
+        session = signInData?.session
+        logger.info('Session created for user:', authData.user.id)
+      }
     }
 
     // Return success

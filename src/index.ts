@@ -1,4 +1,5 @@
 import express from 'express'
+import { createServer } from 'http'
 import { config } from './config'
 import { logger } from './utils/logger'
 import { setupMiddleware } from './middleware'
@@ -6,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler'
 import { setupSwagger } from './middleware/swagger.middleware'
 import { setupStaticServing } from './utils/staticServing'
 import apiRoutes from './routes'
+import { PvPSocketService } from './services/pvp-socket.service'
 
 /**
  * Application entry point
@@ -13,6 +15,7 @@ import apiRoutes from './routes'
  * REVIEW: The entry point now strictly handles server initialization and shutdown
  */
 const app = express()
+const httpServer = createServer(app)
 
 // 1. Setup Standard & Security Middleware
 setupMiddleware(app)
@@ -29,11 +32,18 @@ setupStaticServing(app)
 // 5. Error Handling (Must be last)
 app.use(errorHandler)
 
+// 6. Initialize Socket.io for PvP
+const pvpSocketService = new PvPSocketService(httpServer)
+const io = pvpSocketService.getIO()
+app.set('io', io) // Store io instance for use in controllers
+logger.info('🎮 PvP Socket.io service initialized')
+
 // Start Server
-const server = app.listen(config.port, () => {
+const server = httpServer.listen(config.port, () => {
   logger.info(`🚀 Server running on port ${config.port}`)
   logger.info(`📝 Environment: ${config.nodeEnv}`)
   logger.info(`🌐 Frontend URL: ${config.frontendUrl}`)
+  logger.info(`⚡ WebSocket ready at ws://localhost:${config.port}`)
 })
 
 // Graceful Shutdown

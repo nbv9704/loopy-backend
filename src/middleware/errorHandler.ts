@@ -61,4 +61,7 @@ export const errors = {
   rateLimitExceeded: () => new AppError(429, 'RATE_LIMIT_EXCEEDED', 'Too many requests'),
   executionTimeout: () => new AppError(408, 'EXECUTION_TIMEOUT', 'Code execution timeout'),
   executionError: (message: string) => new AppError(400, 'EXECUTION_ERROR', message),
+  databaseError: (message: string, details?: any) =>
+    new AppError(500, 'DATABASE_ERROR', message, details),
+  unauthorized: () => new AppError(401, 'UNAUTHORIZED', 'Unauthorized access'),
 }
