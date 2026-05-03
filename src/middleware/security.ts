@@ -22,7 +22,7 @@ export const helmetMiddleware = helmet({
       ],
       imgSrc: ["'self'", 'data:', 'https:'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", 'https://cdn.jsdelivr.net'], // Allow CDN for Swagger UI
     },
   },
 })

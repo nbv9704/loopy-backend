@@ -103,36 +103,58 @@ export function setupSwagger(app: Express): void {
         ? [requireAdmin, logDocumentationAccess]
         : []
 
-    // Configure Swagger UI with custom options
-    // Use CDN for assets on serverless platforms (Vercel)
-    const swaggerUiOptions = {
-      customCss: '.swagger-ui .topbar { display: none }', // Hide topbar
-      customSiteTitle: 'Loopy API Documentation',
-      // Use CDN for Swagger UI assets (fixes Vercel serverless issue)
-      customCssUrl: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css',
-      customJs: [
-        'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js',
-        'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js',
-      ],
-      swaggerOptions: {
-        persistAuthorization: true,
-        displayRequestDuration: true,
-        filter: true, // Enable filter
-        syntaxHighlight: {
-          // Enable syntax highlighting
-          activate: true,
-          theme: 'monokai',
-        },
-      },
-    }
+    // Custom HTML for Swagger UI using CDN (fixes Vercel serverless)
+    const customHtml = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Loopy API Documentation</title>
+      <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+      <style>
+        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body { margin:0; padding:0; }
+        .swagger-ui .topbar { display: none; }
+      </style>
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+      <script>
+        window.onload = function() {
+          window.ui = SwaggerUIBundle({
+            url: "/api-docs/openapi.json",
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+              SwaggerUIBundle.presets.apis,
+              SwaggerUIStandalonePreset
+            ],
+            plugins: [
+              SwaggerUIBundle.plugins.DownloadUrl
+            ],
+            layout: "StandaloneLayout",
+            persistAuthorization: true,
+            displayRequestDuration: true,
+            filter: true,
+            syntaxHighlight: {
+              activate: true,
+              theme: "monokai"
+            }
+          });
+        };
+      </script>
+    </body>
+    </html>
+    `
 
-    // Mount Swagger UI at /api-docs endpoint
-    app.use(
-      '/api-docs',
-      ...accessControl,
-      swaggerUi.serve,
-      swaggerUi.setup(swaggerSpec, swaggerUiOptions)
-    )
+    // Serve custom HTML instead of swagger-ui-express
+    app.get('/api-docs', ...accessControl, (req: Request, res: Response) => {
+      res.setHeader('Content-Type', 'text/html')
+      res.send(customHtml)
+    })
 
     logger.info('📚 Swagger documentation available at /api-docs')
   } catch (error) {
