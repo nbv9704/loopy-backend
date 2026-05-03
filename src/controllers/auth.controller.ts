@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { supabase, supabaseAdmin } from '../db/supabase'
 import { errors } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
+import { config } from '../config'
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -30,7 +31,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
         email,
         password,
         options: {
-          emailRedirectTo: process.env.FRONTEND_URL,
+          emailRedirectTo: config.frontendUrl,
           data: {
             display_name: displayName || email.split('@')[0],
           },
