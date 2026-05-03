@@ -24,22 +24,25 @@ export const logger = winston.createLogger({
   level: config.logLevel,
   format: logFormat,
   transports: [
-    // Console transport
+    // Console transport (always enabled)
     new winston.transports.Console({
       format: config.nodeEnv === 'development' ? consoleFormat : logFormat,
     }),
-    // File transport for errors
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    // File transport for all logs
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
+    // File transports (only in development, not on serverless)
+    ...(config.nodeEnv === 'development'
+      ? [
+          new winston.transports.File({
+            filename: 'logs/error.log',
+            level: 'error',
+            maxsize: 5242880, // 5MB
+            maxFiles: 5,
+          }),
+          new winston.transports.File({
+            filename: 'logs/combined.log',
+            maxsize: 5242880, // 5MB
+            maxFiles: 5,
+          }),
+        ]
+      : []),
   ],
 })
