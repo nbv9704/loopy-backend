@@ -111,7 +111,12 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     })
 
     if (error) {
-      throw errors.invalidToken()
+      if (error.message === 'Email not confirmed') {
+        throw errors.unauthorized('Tài khoản chưa được xác nhận. Vui lòng kiểm tra email để kích hoạt.')
+      } else if (error.message === 'Invalid login credentials') {
+        throw errors.unauthorized('Tài khoản hoặc mật khẩu không chính xác')
+      }
+      throw errors.unauthorized(error.message)
     }
 
     res.json({
