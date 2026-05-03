@@ -104,9 +104,16 @@ export function setupSwagger(app: Express): void {
         : []
 
     // Configure Swagger UI with custom options
+    // Use CDN for assets on serverless platforms (Vercel)
     const swaggerUiOptions = {
       customCss: '.swagger-ui .topbar { display: none }', // Hide topbar
       customSiteTitle: 'Loopy API Documentation',
+      // Use CDN for Swagger UI assets (fixes Vercel serverless issue)
+      customCssUrl: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css',
+      customJs: [
+        'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js',
+        'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js',
+      ],
       swaggerOptions: {
         persistAuthorization: true,
         displayRequestDuration: true,
