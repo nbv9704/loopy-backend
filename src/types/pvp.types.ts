@@ -224,8 +224,9 @@ export interface ServerToClientEvents {
     }>
   }) => void
   'match:cooldown': (payload: {
-    matchId: string
-    secondsRemaining: number
+    duration: number
+    isMatchOver: boolean
+    nextQuestionIndex?: number
   }) => void
 
   // Participant updates
