@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { supabase } from '../db/supabase'
 import { errors } from './errorHandler'
+import { getTokenFromRequest } from '../utils/cookieHelper'
 
 export interface AuthRequest extends Request {
   user?: {
@@ -9,15 +10,14 @@ export interface AuthRequest extends Request {
   }
 }
 
-export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticate = async (req: AuthRequest, _res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.authorization
+    // Get token from cookie or Authorization header (fallback)
+    const token = getTokenFromRequest(req)
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       throw errors.authRequired()
     }
-
-    const token = authHeader.substring(7)
 
     const {
       data: { user },
@@ -25,6 +25,8 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     } = await supabase.auth.getUser(token)
 
     if (error || !user) {
+      const { logger } = await import('../utils/logger')
+      logger.error('Supabase getUser failed in auth middleware:', error)
       throw errors.invalidToken()
     }
 
@@ -39,12 +41,12 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
   }
 }
 
-export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const optionalAuth = async (req: AuthRequest, _res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.authorization
+    // Get token from cookie or Authorization header (fallback)
+    const token = getTokenFromRequest(req)
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7)
+    if (token) {
       const {
         data: { user },
       } = await supabase.auth.getUser(token)

@@ -154,15 +154,33 @@ backend/
 └── package.json        # Dependencies and scripts
 ```
 
-## 📚 API Documentation
+## 📚 Documentation
 
-### Base URL
+### 📖 Complete Documentation Hub
+See [**docs/README.md**](docs/README.md) for all documentation.
+
+### 🔒 Security Documentation
+- [Security Fixes Summary](docs/CRITICAL_FIX_SUMMARY.md)
+- [Token Security Migration](docs/TOKEN_SECURITY_MIGRATION.md)
+- [Code Execution Sandboxing](docs/CODE_EXECUTION_SANDBOXING.md)
+
+### 🧪 Testing Documentation
+- [Quick Start Testing (5 min)](docs/QUICK_START_TESTING.md)
+- [Complete Testing Guide (30 min)](docs/LOCAL_TESTING_GUIDE.md)
+- [Testing Hub](docs/README_TESTING.md)
+
+### 🚀 Operations Documentation
+- [Deployment Checklist](docs/DEPLOYMENT_CHECKLIST.md)
+
+### API Documentation
+
+#### Base URL
 
 ```
 http://localhost:3000/api
 ```
 
-### Authentication
+#### Authentication
 
 Most endpoints require authentication via Supabase JWT token:
 
@@ -170,24 +188,21 @@ Most endpoints require authentication via Supabase JWT token:
 Authorization: Bearer <your_jwt_token>
 ```
 
-### Key Endpoints
+#### Key Endpoints
 
-#### Code Execution
-
+**Code Execution**
 ```
 POST /api/execute
 Body: { code: string, language: string }
 ```
 
-#### Grading
-
+**Grading**
 ```
 POST /api/grading/exercises/:exerciseId/submit
 Body: { code: string, language: string }
 ```
 
-#### User Progress
-
+**User Progress**
 ```
 GET /api/progress
 ```

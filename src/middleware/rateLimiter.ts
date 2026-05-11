@@ -5,7 +5,7 @@ import { config } from '../config'
 const isDevelopment = config.nodeEnv === 'development'
 
 export const rateLimiter = isDevelopment
-  ? (req: any, res: any, next: any) => next() // Skip rate limiting in dev
+  ? (_req: any, _res: any, next: any) => next() // Skip rate limiting in dev
   : rateLimit({
       windowMs: config.rateLimit.windowMs,
       max: config.rateLimit.maxRequests,
@@ -21,7 +21,7 @@ export const rateLimiter = isDevelopment
     })
 
 export const codeExecutionLimiter = isDevelopment
-  ? (req: any, res: any, next: any) => next() // Skip rate limiting in dev
+  ? (_req: any, _res: any, next: any) => next() // Skip rate limiting in dev
   : rateLimit({
       windowMs: 60 * 60 * 1000, // 1 hour
       max: config.rateLimit.codeExecutionLimit,
@@ -43,7 +43,7 @@ export const codeExecutionLimiter = isDevelopment
  * Requirement 13.8: Rate limiting of 10 submissions per minute per user
  */
 export const submissionRateLimiter = isDevelopment
-  ? (req: any, res: any, next: any) => next() // Skip rate limiting in dev
+  ? (_req: any, _res: any, next: any) => next() // Skip rate limiting in dev
   : rateLimit({
       windowMs: 60 * 1000, // 1 minute
       max: 10, // 10 submissions per minute per user

@@ -354,4 +354,87 @@ router.get('/me', authController.getCurrentUser)
  */
 router.post('/refresh', authController.refreshToken)
 
+// ============================================================================
+// DEV-ONLY: Quick login with auto-created test account
+// ============================================================================
+if (process.env.NODE_ENV === 'development') {
+  router.post('/dev-login', async (_req, res, next) => {
+    try {
+      const { supabase: sb, supabaseAdmin: sbAdmin } = await import('../db/supabase')
+      const { setAuthTokenCookie, setRefreshTokenCookie } = await import('../utils/cookieHelper')
+      const { logger: log } = await import('../utils/logger')
+
+      const testEmail = 'dev-admin-2026@loopy.dev'
+      const testPassword = 'dev_password_2026_!@#'
+      const testName = 'Dev Admin'
+
+      // Try to sign in first
+      let { data, error } = await sb.auth.signInWithPassword({
+        email: testEmail,
+        password: testPassword,
+      })
+
+      // If account doesn't exist or password changed, try to create/reset it
+      if (error) {
+        log.info('[dev-login] SignIn failed, attempting to create or update test account...', error.message)
+
+        // Force delete first just in case
+        const { data: existingUser } = await sbAdmin.auth.admin.listUsers()
+        const userToDel = existingUser.users.find(u => u.email === testEmail)
+        if (userToDel) {
+          await sbAdmin.auth.admin.deleteUser(userToDel.id)
+        }
+
+        const { data: createData, error: createErr } = await sbAdmin.auth.admin.createUser({
+          email: testEmail,
+          password: testPassword,
+          email_confirm: true,
+          user_metadata: { display_name: testName },
+        })
+
+        if (createErr) {
+          log.error('[dev-login] Failed to create test user:', createErr)
+          return res.status(500).json({ success: false, error: createErr.message })
+        }
+
+        // Create profile
+        if (createData.user) {
+          await sbAdmin.from('user_profiles').upsert({
+            id: createData.user.id,
+            display_name: testName,
+            preferred_language: 'javascript',
+          } as any)
+        }
+
+        // Now sign in
+        const signIn = await sb.auth.signInWithPassword({
+          email: testEmail,
+          password: testPassword,
+        })
+        data = signIn.data
+        error = signIn.error
+      }
+
+      if (error || !data.session) {
+        log.error('[dev-login] Authentication failed. Error details:', error, 'Session data:', data.session);
+        return res.status(401).json({ success: false, error: error?.message || 'Login failed' })
+      }
+
+      // Set cookies
+      setAuthTokenCookie(res, data.session.access_token)
+      setRefreshTokenCookie(res, data.session.refresh_token)
+
+      return res.json({
+        success: true,
+        data: {
+          user: { id: data.user.id, email: data.user.email },
+          message: `Dev login OK — ${testEmail}`,
+        },
+      })
+    } catch (err) {
+      return next(err)
+    }
+  })
+}
+
 export default router

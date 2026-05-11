@@ -12,7 +12,7 @@ import { AuthRequest } from '../middleware/auth'
 import { gradingOrchestratorService } from '../services/grading-orchestrator.service'
 import { supabaseAdmin } from '../db/supabase'
 import { errors } from '../middleware/errorHandler'
-import { logger } from '../utils/logger'
+import {  } from '../utils/logger'
 
 /** Dev fallback userId when not authenticated (must be valid UUID for Postgres) */
 const DEV_USER_ID = '00000000-0000-0000-0000-000000000000'

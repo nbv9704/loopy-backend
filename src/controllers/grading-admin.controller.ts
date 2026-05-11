@@ -206,7 +206,7 @@ export const createTestCase = async (req: AuthRequest, res: Response, next: Next
  * Get AI grading usage statistics
  * Requirements: 18.1, 18.2, 18.5
  */
-export const getUsageStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getUsageStats = async (_req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const today = new Date().toISOString().split('T')[0]
 

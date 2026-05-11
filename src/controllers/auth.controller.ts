@@ -3,6 +3,13 @@ import { supabase, supabaseAdmin } from '../db/supabase'
 import { errors } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import { config } from '../config'
+import {
+  setAuthTokenCookie,
+  setRefreshTokenCookie,
+  clearAuthCookies,
+  getRefreshTokenFromRequest,
+  getTokenFromRequest,
+} from '../utils/cookieHelper'
 
 export const signup = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -81,10 +88,18 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
       } else {
         session = signInData?.session
         logger.info('Session created for user:', authData.user.id)
+
+        // Set secure httpOnly cookies
+        if (session?.access_token) {
+          setAuthTokenCookie(res, session.access_token)
+        }
+        if (session?.refresh_token) {
+          setRefreshTokenCookie(res, session.refresh_token)
+        }
       }
     }
 
-    // Return success
+    // Return success (NO TOKENS in response body for security)
     res.status(201).json({
       success: true,
       data: {
@@ -92,7 +107,7 @@ export const signup = async (req: Request, res: Response, next: NextFunction) =>
           id: authData.user.id,
           email: authData.user.email,
         },
-        session: session,
+        // Don't send tokens in response - they're in httpOnly cookies
         message: session ? 'Đăng ký thành công' : 'Vui lòng kiểm tra email để xác nhận tài khoản',
       },
     })
@@ -113,13 +128,24 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
     if (error) {
       if (error.message === 'Email not confirmed') {
-        throw errors.unauthorized('Tài khoản chưa được xác nhận. Vui lòng kiểm tra email để kích hoạt.')
+        throw errors.unauthorized(
+          'Tài khoản chưa được xác nhận. Vui lòng kiểm tra email để kích hoạt.'
+        )
       } else if (error.message === 'Invalid login credentials') {
         throw errors.unauthorized('Tài khoản hoặc mật khẩu không chính xác')
       }
       throw errors.unauthorized(error.message)
     }
 
+    // Set secure httpOnly cookies
+    if (data.session?.access_token) {
+      setAuthTokenCookie(res, data.session.access_token)
+    }
+    if (data.session?.refresh_token) {
+      setRefreshTokenCookie(res, data.session.refresh_token)
+    }
+
+    // Return success (NO TOKENS in response body for security)
     res.json({
       success: true,
       data: {
@@ -127,7 +153,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
           id: data.user.id,
           email: data.user.email,
         },
-        session: data.session,
+        // Don't send tokens in response - they're in httpOnly cookies
       },
     })
   } catch (error) {
@@ -137,11 +163,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
 export const logout = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.authorization
+    const token = getTokenFromRequest(req)
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7)
-
+    if (token) {
       // Verify token to get user, then sign them out via admin API
       const {
         data: { user },
@@ -150,6 +174,9 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
         await supabaseAdmin.auth.admin.signOut(user.id)
       }
     }
+
+    // Clear httpOnly cookies
+    clearAuthCookies(res)
 
     res.json({
       success: true,
@@ -164,13 +191,12 @@ export const logout = async (req: Request, res: Response, next: NextFunction) =>
 
 export const getCurrentUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.authorization
+    const token = getTokenFromRequest(req)
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       throw errors.authRequired()
     }
 
-    const token = authHeader.substring(7)
     const {
       data: { user },
       error,
@@ -204,7 +230,8 @@ export const getCurrentUser = async (req: Request, res: Response, next: NextFunc
 
 export const refreshToken = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { refreshToken } = req.body
+    // Get refresh token from cookie or body (fallback for migration)
+    const refreshToken = getRefreshTokenFromRequest(req)
 
     if (!refreshToken) {
       throw errors.invalidToken()
@@ -218,10 +245,20 @@ export const refreshToken = async (req: Request, res: Response, next: NextFuncti
       throw errors.invalidToken()
     }
 
+    // Set new secure httpOnly cookies
+    if (data.session?.access_token) {
+      setAuthTokenCookie(res, data.session.access_token)
+    }
+    if (data.session?.refresh_token) {
+      setRefreshTokenCookie(res, data.session.refresh_token)
+    }
+
+    // Return success (NO TOKENS in response body for security)
     res.json({
       success: true,
       data: {
-        session: data.session,
+        message: 'Token refreshed successfully',
+        // Don't send tokens in response - they're in httpOnly cookies
       },
     })
   } catch (error) {

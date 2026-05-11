@@ -49,7 +49,10 @@ export class GradingCacheService {
    */
   private async initializeRedis(redisUrl: string): Promise<void> {
     try {
-      this.redisClient = createClient({ url: redisUrl })
+      this.redisClient = createClient({ 
+        url: redisUrl,
+        socket: redisUrl.startsWith('rediss://') ? { tls: true, rejectUnauthorized: false } : undefined
+      })
 
       this.redisClient.on('error', err => {
         console.error('Redis Client Error:', err)

@@ -6,6 +6,7 @@
 import { supabaseAdmin } from '../db/supabase'
 import { logger } from '../utils/logger'
 import { errors } from '../middleware/errorHandler'
+import { testRunnerService } from './test-runner.service'
 import type {
   PvPMatch,
   PvPQuestion,
@@ -165,7 +166,7 @@ export const pvpService = {
     }
 
     // Get user profiles for all participants
-    const userIds = (participants || []).map((p: any) => p.user_id)
+    const userIds = (participants || []).map((p: { user_id: string }) => p.user_id)
     const { data: profiles } = await supabaseAdmin
       .from('user_profiles')
       .select('id, display_name, avatar_url')
@@ -175,7 +176,7 @@ export const pvpService = {
     const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
 
     // Flatten user info
-    const formattedParticipants = (participants || []).map((p: any) => {
+    const formattedParticipants = (participants || []).map((p: PvPParticipant) => {
       const profile = profileMap.get(p.user_id)
       return {
         ...p,
@@ -209,7 +210,7 @@ export const pvpService = {
       throw errors.validationError('Match has already started or ended')
     }
 
-    const participantCount = (match as any).pvp_participants?.[0]?.count || 0
+    const participantCount = (match as { pvp_participants?: [{ count: number }] }).pvp_participants?.[0]?.count || 0
     if (participantCount >= match.max_players) {
       throw errors.validationError('Match is full')
     }
@@ -510,7 +511,8 @@ export const pvpService = {
     }
 
     // Run test cases to determine correctness
-    const testResults = await this.runTestCases(code, question.test_cases || [])
+    const languageId = match.language_id || 'javascript'
+    const testResults = await this.runTestCases(code, question.test_cases || [], languageId)
     const passedCount = testResults.filter(r => r.passed).length
     const totalCount = testResults.length
 
@@ -580,15 +582,29 @@ export const pvpService = {
    */
   async runTestCases(
     code: string,
-    testCases: Array<{ input: any[]; expected: any }>
-  ): Promise<Array<{ passed: boolean; input: any[]; expected: any; actual: any }>> {
-    // TODO: Implement proper sandboxed code execution
-    // For now, return mock results
-    return testCases.map(tc => ({
-      passed: true,
+    testCases: Array<{ input: unknown[]; expected: unknown }>,
+    language: string
+  ): Promise<Array<{ passed: boolean; input: unknown[]; expected: unknown; actual: unknown }>> {
+    // Map to TestCase format for testRunnerService
+    const mappedTestCases = testCases.map((tc, idx) => ({
+      id: `tc-${idx}`,
+      exerciseId: 'pvp-match',
       input: tc.input,
-      expected: tc.expected,
-      actual: tc.expected,
+      expectedOutput: tc.expected,
+      weight: 10, // All tests weighted equally in PvP for now
+      timeout: 3000,
+      description: `Test Case ${idx + 1}`,
+      isHidden: false,
+      orderIndex: idx,
+    }))
+
+    const testRunResult = await testRunnerService.runTests(code, mappedTestCases, language)
+
+    return testRunResult.results.map(r => ({
+      passed: r.passed,
+      input: mappedTestCases.find(tc => tc.id === r.testCaseId)?.input as unknown[],
+      expected: r.expectedOutput,
+      actual: r.actualOutput,
     }))
   },
 
@@ -641,7 +657,7 @@ export const pvpService = {
     }
 
     // Get user profiles for all users in leaderboard
-    const userIds = (data || []).map((entry: any) => entry.user_id)
+    const userIds = (data || []).map((entry: { user_id: string }) => entry.user_id)
     const { data: profiles } = await supabaseAdmin
       .from('user_profiles')
       .select('id, display_name, avatar_url')
@@ -650,7 +666,7 @@ export const pvpService = {
     // Create a map of user profiles
     const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
 
-    return (data || []).map((entry: any) => {
+    return (data || []).map((entry: PvPUserStats) => {
       const profile = profileMap.get(entry.user_id)
       return {
         ...entry,

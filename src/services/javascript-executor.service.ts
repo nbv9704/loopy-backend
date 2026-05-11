@@ -14,7 +14,7 @@
  * Validates Requirements: 2.1, 2.4, 2.6, 13.7, 17.1
  */
 
-import { VM } from 'vm2'
+import ivm from 'isolated-vm'
 import type { ExecutionResult } from './grading.types'
 
 /**
@@ -60,53 +60,88 @@ export class JavaScriptExecutor {
         }
       }
 
-      // Create sandbox with console capture
-      const sandbox = {
-        input,
-        console: {
-          log: (...args: any[]) => {
-            stdoutLines.push(args.map(arg => this.formatValue(arg)).join(' '))
-          },
-          error: (...args: any[]) => {
-            stderrLines.push(args.map(arg => this.formatValue(arg)).join(' '))
-          },
-          warn: (...args: any[]) => {
-            stderrLines.push('Warning: ' + args.map(arg => this.formatValue(arg)).join(' '))
-          },
-          info: (...args: any[]) => {
-            stdoutLines.push(args.map(arg => this.formatValue(arg)).join(' '))
-          },
-        },
-        // Provide common globals that are safe
-        Math,
-        Date,
-        JSON,
-        Array,
-        Object,
-        String,
-        Number,
-        Boolean,
-        parseInt,
-        parseFloat,
-        isNaN,
-        isFinite,
+      // Create sandbox using isolated-vm
+      const isolate = new ivm.Isolate({ memoryLimit: this.memoryLimit / (1024 * 1024) })
+      const context = isolate.createContextSync()
+      const jail = context.global
+      jail.setSync('global', jail.derefInto())
+
+      // Set up console capturing
+      const logCallback = function(str: string) {
+        stdoutLines.push(str)
+      }
+      const errorCallback = function(str: string) {
+        stderrLines.push(str)
+      }
+      const warnCallback = function(str: string) {
+        stderrLines.push('Warning: ' + str)
       }
 
-      // Create VM with security restrictions
-      const vm = new VM({
-        timeout,
-        sandbox,
-        eval: false, // Disable eval
-        wasm: false, // Disable WebAssembly
-        fixAsync: true, // Fix async/await issues
-      })
+      jail.setSync('_logCallback', new ivm.Reference(logCallback))
+      jail.setSync('_errorCallback', new ivm.Reference(errorCallback))
+      jail.setSync('_warnCallback', new ivm.Reference(warnCallback))
 
-      // Execute the code
+      // Setup inputs if present
+      let inputCode = 'const input = null;'
+      if (input !== undefined) {
+        try {
+          inputCode = `const input = JSON.parse(${JSON.stringify(JSON.stringify(input))});`
+        } catch {
+          inputCode = `const input = null;`
+        }
+      }
+
+      context.evalSync(`
+        ${inputCode}
+        global.console = {
+          log: (...args) => {
+            const serialized = args.map(arg => {
+              if (typeof arg === 'object' && arg !== null) {
+                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
+              }
+              return String(arg);
+            });
+            _logCallback.applySync(undefined, [serialized.join(' ')]);
+          },
+          error: (...args) => {
+            const serialized = args.map(arg => {
+              if (typeof arg === 'object' && arg !== null) {
+                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
+              }
+              return String(arg);
+            });
+            _errorCallback.applySync(undefined, [serialized.join(' ')]);
+          },
+          warn: (...args) => {
+            const serialized = args.map(arg => {
+              if (typeof arg === 'object' && arg !== null) {
+                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
+              }
+              return String(arg);
+            });
+            _warnCallback.applySync(undefined, [serialized.join(' ')]);
+          },
+          info: (...args) => {
+            const serialized = args.map(arg => {
+              if (typeof arg === 'object' && arg !== null) {
+                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
+              }
+              return String(arg);
+            });
+            _logCallback.applySync(undefined, [serialized.join(' ')]);
+          }
+        };
+      `)
+
       let output: any
       try {
-        output = vm.run(code)
+        const script = isolate.compileScriptSync(code)
+        // Execute and attempt to parse the result natively
+        const result = script.runSync(context, { timeout })
+        // If it's an object reference, we won't get it directly unless we copy, but primitive works.
+        // For our auto grading, stdout is typically what matters most.
+        output = result
       } catch (vmError: any) {
-        // Handle syntax errors and runtime errors
         const errorMessage = vmError.message || String(vmError)
 
         // Check if it's a timeout error
@@ -142,6 +177,8 @@ export class JavaScriptExecutor {
           executionTime: Date.now() - startTime,
           error: errorMessage,
         }
+      } finally {
+        isolate.dispose()
       }
 
       // Successful execution
@@ -168,24 +205,6 @@ export class JavaScriptExecutor {
     }
   }
 
-  /**
-   * Format a value for console output
-   * Handles objects, arrays, and primitive types
-   */
-  private formatValue(value: any): string {
-    if (value === null) return 'null'
-    if (value === undefined) return 'undefined'
-    if (typeof value === 'string') return value
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-
-    try {
-      // For objects and arrays, use JSON.stringify
-      return JSON.stringify(value)
-    } catch {
-      // Fallback for circular references or non-serializable objects
-      return String(value)
-    }
-  }
 }
 
 /**

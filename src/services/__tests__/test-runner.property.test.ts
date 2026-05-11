@@ -183,7 +183,7 @@ describe('Property-Based Tests: Test Runner', () => {
               orderIndex: i,
             }))
 
-            const results = weights.map((w, i) => ({
+            const results = weights.map((_w, i) => ({
               testCaseId: `test-${i}`,
               passed: true, // All pass
               actualOutput: null,
@@ -218,7 +218,7 @@ describe('Property-Based Tests: Test Runner', () => {
               orderIndex: i,
             }))
 
-            const results = weights.map((w, i) => ({
+            const results = weights.map((_w, i) => ({
               testCaseId: `test-${i}`,
               passed: false, // All fail
               actualOutput: null,

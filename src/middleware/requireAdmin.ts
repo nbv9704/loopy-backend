@@ -9,7 +9,7 @@ import { errors } from './errorHandler'
  *
  * Requirements: 2.3, 2.4, 2.5
  */
-export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireAdmin = async (req: AuthRequest, _res: Response, next: NextFunction) => {
   try {
     // Verify user is authenticated
     if (!req.user) {

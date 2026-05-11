@@ -213,7 +213,7 @@ export async function getCurrentUser(
  * GET /api/admin-auth/dashboard/stats
  */
 export async function getDashboardStats(
-  req: AuthRequest,
+  _req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> {

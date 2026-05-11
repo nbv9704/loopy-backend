@@ -160,7 +160,7 @@ async function seedChapters(languageId: string, chapters: Chapter[]) {
 
   for (let i = 0; i < chapters.length; i++) {
     const chapter = chapters[i]
-    const { data, error } = await supabaseAdmin
+      const { error } = await supabaseAdmin
       .from('chapters')
       .upsert(
         {

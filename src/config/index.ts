@@ -76,3 +76,12 @@ for (const envVar of requiredEnvVars) {
     throw new Error(`Missing required environment variable: ${envVar}`)
   }
 }
+
+if (config.nodeEnv === 'production') {
+  if (!process.env.ADMIN_SESSION_SECRET) {
+    throw new Error('ADMIN_SESSION_SECRET must be set in production')
+  }
+  if (!process.env.REDIS_URL) {
+    throw new Error('REDIS_URL must be set in production')
+  }
+}

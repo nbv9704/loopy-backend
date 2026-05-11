@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express'
+import { Response, NextFunction } from 'express'
 import { supabaseAdmin } from '../db/supabase'
 import { AuthRequest } from '../middleware/auth'
 import { errors } from '../middleware/errorHandler'
@@ -37,7 +37,7 @@ export const submitExercise = async (req: AuthRequest, res: Response, next: Next
         error = result.error
 
         // Simple validation: check if code runs without error
-        // TODO: Implement proper test case validation
+
         isCorrect = !result.error
       } else {
         throw errors.executionError('Language not supported for execution')

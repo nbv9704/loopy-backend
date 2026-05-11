@@ -8,6 +8,13 @@ import { Server as HTTPServer } from 'http'
 import { config } from '../config'
 import { logger } from '../utils/logger'
 import { pvpService } from './pvp.service'
+import {
+  scheduleMatchTimer,
+  cancelMatchTimer,
+  createMatchTimerWorker,
+  getRedisConnection,
+  type MatchTimerJobName,
+} from './redis.service'
 import { supabaseAdmin } from '../db/supabase'
 import type {
   ClientToServerEvents,
@@ -23,7 +30,12 @@ export class PvPSocketService {
     InterServerEvents,
     SocketData
   >
-  private matchTimers: Map<string, NodeJS.Timeout> = new Map()
+  private matchTimers: Map<string, NodeJS.Timeout> = new Map() // In-memory fallback when Redis is unavailable
+  private disconnectTimers: Map<string, NodeJS.Timeout> = new Map() // Grace period timers keyed by `matchId:userId`
+  private pausedMatches: Set<string> = new Set() // Matches currently paused due to disconnect
+  private useRedis: boolean = false
+
+  private static readonly DISCONNECT_GRACE_SECONDS = 30
 
   constructor(httpServer: HTTPServer) {
     this.io = new SocketIOServer(httpServer, {
@@ -36,6 +48,7 @@ export class PvPSocketService {
 
     this.setupMiddleware()
     this.setupEventHandlers()
+    this.setupRedisWorker()
   }
 
   /**
@@ -44,7 +57,21 @@ export class PvPSocketService {
   private setupMiddleware(): void {
     this.io.use(async (socket, next) => {
       try {
-        const token = socket.handshake.auth.token
+        // Priority 1: Get token from cookie (new secure method)
+        let token = socket.handshake.auth.token
+
+        // Priority 2: Get token from cookie header (httpOnly cookies)
+        if (!token && socket.request.headers.cookie) {
+          const cookies = socket.request.headers.cookie.split(';').reduce(
+            (acc, cookie) => {
+              const [key, value] = cookie.trim().split('=')
+              acc[key] = value
+              return acc
+            },
+            {} as Record<string, string>
+          )
+          token = cookies.auth_token
+        }
 
         if (!token) {
           return next(new Error('Authentication token required'))
@@ -65,6 +92,37 @@ export class PvPSocketService {
         next(new Error('Authentication failed'))
       }
     })
+  }
+
+  /**
+   * Setup BullMQ worker to process match timer jobs from Redis.
+   * Falls back to in-memory setTimeout if Redis is not available.
+   */
+  private setupRedisWorker(): void {
+    const redis = getRedisConnection()
+    if (!redis) {
+      logger.info('Redis not available – using in-memory timers (development mode)')
+      this.useRedis = false
+      return
+    }
+
+    this.useRedis = true
+
+    createMatchTimerWorker(async (jobName: MatchTimerJobName, matchId: string) => {
+      switch (jobName) {
+        case 'endQuestion':
+          await this.endQuestion(matchId)
+          break
+        case 'cooldownNext':
+          await this.handleCooldownNext(matchId)
+          break
+        case 'cooldownComplete':
+          await this.completeMatch(matchId)
+          break
+      }
+    })
+
+    logger.info('Redis match timer worker initialized')
   }
 
   /**
@@ -152,6 +210,37 @@ export class PvPSocketService {
       // Get full match data and send to this user
       const match = await pvpService.getMatch(matchId)
       socket.emit('match:updated', { match } as any)
+
+      // --- Handle reconnection to a paused match ---
+      const timerKey = `${matchId}:${userId}`
+      if (this.disconnectTimers.has(timerKey)) {
+        // Cancel the grace period timer
+        clearTimeout(this.disconnectTimers.get(timerKey)!)
+        this.disconnectTimers.delete(timerKey)
+
+        logger.info(`[Disconnect Grace] User ${userId} reconnected — cancelling forfeit timer`)
+
+        // Notify everyone about the reconnection
+        this.io.to(matchId).emit('participant:reconnected', userId)
+
+        // Get display name
+        const { data: reconProfile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('display_name')
+          .eq('id', userId)
+          .single()
+
+        this.io.to(matchId).emit('match:resumed', {
+          reconnectedUserId: userId,
+          displayName: reconProfile?.display_name || 'Người chơi',
+        })
+
+        // If match was paused, unpause and restart the question timer
+        if (this.pausedMatches.has(matchId)) {
+          this.pausedMatches.delete(matchId)
+          await this.startQuestion(matchId)
+        }
+      }
 
       logger.info(`User ${userId} socket connected to match ${matchId}`)
     } catch (error: any) {
@@ -288,12 +377,17 @@ export class PvPSocketService {
         timeRemaining: match.time_per_question,
       })
 
-      // Set timer for question
-      const timer = setTimeout(async () => {
-        await this.endQuestion(matchId)
-      }, match.time_per_question * 1000)
+      const delayMs = match.time_per_question * 1000
 
-      this.matchTimers.set(matchId, timer)
+      // Schedule timer via Redis queue, fallback to in-memory
+      if (this.useRedis) {
+        await scheduleMatchTimer('endQuestion', matchId, delayMs)
+      } else {
+        const timer = setTimeout(async () => {
+          await this.endQuestion(matchId)
+        }, delayMs)
+        this.matchTimers.set(matchId, timer)
+      }
 
       logger.info(`Question started for match ${matchId}`)
     } catch (error) {
@@ -308,13 +402,8 @@ export class PvPSocketService {
     try {
       logger.info(`[endQuestion] Starting for match ${matchId}`)
 
-      // Clear timer
-      const timer = this.matchTimers.get(matchId)
-      if (timer) {
-        clearTimeout(timer)
-        this.matchTimers.delete(matchId)
-        logger.info(`[endQuestion] Cleared timer for match ${matchId}`)
-      }
+      // Clear timer (both Redis and in-memory)
+      await this.clearQuestionTimer(matchId)
 
       // Get match
       const { data: match } = await supabaseAdmin
@@ -346,20 +435,25 @@ export class PvPSocketService {
           nextQuestionIndex: nextIndex,
         })
 
-        // Wait 3 seconds
-        setTimeout(async () => {
-          try {
-            // Move to next question
-            await supabaseAdmin
-              .from('pvp_matches')
-              .update({ current_question_index: nextIndex })
-              .eq('id', matchId)
-
-            await this.startQuestion(matchId)
-          } catch (e) {
-            logger.error('[endQuestion cooldown timeout] Error:', e)
-          }
-        }, 3000)
+        // Schedule cooldown via Redis or fallback
+        if (this.useRedis) {
+          // Store nextIndex in Redis for the worker to pick up
+          const redis = getRedisConnection()
+          if (redis) await redis.set(`match:nextIndex:${matchId}`, nextIndex, 'EX', 30)
+          await scheduleMatchTimer('cooldownNext', matchId, 3000)
+        } else {
+          setTimeout(async () => {
+            try {
+              await supabaseAdmin
+                .from('pvp_matches')
+                .update({ current_question_index: nextIndex })
+                .eq('id', matchId)
+              await this.startQuestion(matchId)
+            } catch (e) {
+              logger.error('[endQuestion cooldown timeout] Error:', e)
+            }
+          }, 3000)
+        }
       } else {
         logger.info(
           `[endQuestion] No more questions, entering cooldown before completing match ${matchId}`
@@ -371,18 +465,66 @@ export class PvPSocketService {
           isMatchOver: true,
         })
 
-        // Wait 3 seconds
-        setTimeout(async () => {
-          try {
-            await this.completeMatch(matchId)
-          } catch (e) {
-            logger.error('[endQuestion final cooldown timeout] Error:', e)
-          }
-        }, 3000)
+        // Schedule final cooldown
+        if (this.useRedis) {
+          await scheduleMatchTimer('cooldownComplete', matchId, 3000)
+        } else {
+          setTimeout(async () => {
+            try {
+              await this.completeMatch(matchId)
+            } catch (e) {
+              logger.error('[endQuestion final cooldown timeout] Error:', e)
+            }
+          }, 3000)
+        }
       }
     } catch (error) {
       logger.error('[endQuestion] Error:', error)
     }
+  }
+
+  /**
+   * Handle cooldown -> next question transition (called by Redis worker)
+   */
+  private async handleCooldownNext(matchId: string): Promise<void> {
+    try {
+      // Retrieve the next index from Redis
+      const redis = getRedisConnection()
+      let nextIndex = 1
+      if (redis) {
+        const stored = await redis.get(`match:nextIndex:${matchId}`)
+        if (stored) {
+          nextIndex = parseInt(stored, 10)
+          await redis.del(`match:nextIndex:${matchId}`)
+        }
+      }
+
+      await supabaseAdmin
+        .from('pvp_matches')
+        .update({ current_question_index: nextIndex })
+        .eq('id', matchId)
+
+      await this.startQuestion(matchId)
+    } catch (e) {
+      logger.error('[handleCooldownNext] Error:', e)
+    }
+  }
+
+  /**
+   * Clear question timer from both Redis queue and in-memory map
+   */
+  private async clearQuestionTimer(matchId: string): Promise<void> {
+    if (this.useRedis) {
+      await cancelMatchTimer('endQuestion', matchId)
+    }
+
+    const timer = this.matchTimers.get(matchId)
+    if (timer) {
+      clearTimeout(timer)
+      this.matchTimers.delete(matchId)
+    }
+
+    logger.info(`[clearQuestionTimer] Cleared timer for match ${matchId}`)
   }
 
   /**
@@ -524,7 +666,7 @@ export class PvPSocketService {
         .eq('question_id', payload.questionId)
         .order('submitted_at', { ascending: true })
 
-      const rank = submissions?.findIndex(s => s.user_id === userId) + 1 || 1
+      const rank = (submissions ? submissions.findIndex((s: { user_id: string }) => s.user_id === userId) : -1) + 1 || 1
 
       // Emit rank
       this.io.to(payload.matchId).emit('submission:ranked', {
@@ -556,11 +698,7 @@ export class PvPSocketService {
         )
 
         // Clear existing timer
-        const timer = this.matchTimers.get(payload.matchId)
-        if (timer) {
-          clearTimeout(timer)
-          this.matchTimers.delete(payload.matchId)
-        }
+        await this.clearQuestionTimer(payload.matchId)
 
         // End question after short delay (2 seconds to show results)
         setTimeout(async () => {
@@ -603,7 +741,7 @@ export class PvPSocketService {
         .eq('question_id', payload.questionId)
         .order('submitted_at', { ascending: true })
 
-      const rank = submissions?.findIndex(s => s.user_id === userId) + 1 || 1
+      const rank = (submissions ? submissions.findIndex((s: { user_id: string }) => s.user_id === userId) : -1) + 1 || 1
 
       // Emit rank
       this.io.to(payload.matchId).emit('submission:ranked', {
@@ -635,11 +773,7 @@ export class PvPSocketService {
         )
 
         // Clear existing timer
-        const timer = this.matchTimers.get(payload.matchId)
-        if (timer) {
-          clearTimeout(timer)
-          this.matchTimers.delete(payload.matchId)
-        }
+        await this.clearQuestionTimer(payload.matchId)
 
         // End question after short delay (2 seconds to show results)
         setTimeout(async () => {
@@ -734,7 +868,8 @@ export class PvPSocketService {
   }
 
   /**
-   * Handle disconnect
+   * Handle disconnect — pause the match and give the user 30s to reconnect.
+   * If they don't reconnect in time, they automatically forfeit (lose).
    */
   private async handleDisconnect(
     socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>
@@ -744,17 +879,92 @@ export class PvPSocketService {
 
     logger.info(`User disconnected: ${userId} (${socket.id})`)
 
-    if (matchId) {
-      // Update participant status
+    if (!matchId || !userId) return
+
+    // Update participant status
+    await supabaseAdmin
+      .from('pvp_participants')
+      .update({ is_connected: false })
+      .eq('match_id', matchId)
+      .eq('user_id', userId)
+
+    // Notify other participants
+    this.io.to(matchId).emit('participant:disconnected', userId)
+
+    // Check if the match is actively in progress
+    const { data: match } = await supabaseAdmin
+      .from('pvp_matches')
+      .select('status')
+      .eq('id', matchId)
+      .single()
+
+    if (!match || match.status !== 'in_progress') return
+
+    // --- PAUSE the match ---
+    logger.info(`[Disconnect Grace] Pausing match ${matchId} — waiting 30s for user ${userId}`)
+
+    // Pause the question timer so it doesn't tick while we wait
+    await this.clearQuestionTimer(matchId)
+    this.pausedMatches.add(matchId)
+
+    // Get display name for the notification
+    const { data: profile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('display_name')
+      .eq('id', userId)
+      .single()
+
+    const displayName = profile?.display_name || 'Người chơi'
+
+    // Notify all clients that the match is paused
+    this.io.to(matchId).emit('match:paused', {
+      disconnectedUserId: userId,
+      displayName,
+      timeoutSeconds: PvPSocketService.DISCONNECT_GRACE_SECONDS,
+    })
+
+    // Start 30s grace timer
+    const timerKey = `${matchId}:${userId}`
+    const graceTimer = setTimeout(async () => {
+      this.disconnectTimers.delete(timerKey)
+
+      // Check if user reconnected in the meantime
+      const { data: participant } = await supabaseAdmin
+        .from('pvp_participants')
+        .select('is_connected')
+        .eq('match_id', matchId)
+        .eq('user_id', userId)
+        .single()
+
+      if (participant?.is_connected) {
+        // They reconnected — timer is stale, do nothing
+        return
+      }
+
+      // --- FORFEIT ---
+      logger.info(`[Disconnect Grace] User ${userId} did not reconnect — auto-forfeit`)
+
+      this.pausedMatches.delete(matchId)
+
+      // Notify all clients
+      this.io.to(matchId).emit('match:forfeit', {
+        forfeitUserId: userId,
+        displayName,
+        reason: 'disconnect_timeout',
+      })
+
+      // Set this user's score to 0 and complete the match with the other player winning
       await supabaseAdmin
         .from('pvp_participants')
-        .update({ is_connected: false })
+        .update({ total_score: 0, final_rank: 99 })
         .eq('match_id', matchId)
         .eq('user_id', userId)
 
-      // Notify other participants
-      this.io.to(matchId).emit('participant:disconnected', userId!)
-    }
+      // Complete the match
+      await this.completeMatch(matchId)
+    }, PvPSocketService.DISCONNECT_GRACE_SECONDS * 1000)
+
+    this.disconnectTimers.set(timerKey, graceTimer)
   }
 
   /**

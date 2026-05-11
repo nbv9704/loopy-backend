@@ -1,6 +1,6 @@
 import { Express, Request, Response, NextFunction } from 'express'
 import swaggerJsdoc from 'swagger-jsdoc'
-import swaggerUi from 'swagger-ui-express'
+
 // import SwaggerParser from '@apidevtools/swagger-parser' // Disabled due to ajv compatibility issues
 import yaml from 'js-yaml'
 import { swaggerOptions } from '../config/swagger.config'
@@ -15,7 +15,7 @@ import { AuthRequest } from './auth'
  *
  * Requirements: 10.7
  */
-function logDocumentationAccess(req: AuthRequest, res: Response, next: NextFunction): void {
+function logDocumentationAccess(req: AuthRequest, _res: Response, next: NextFunction): void {
   logger.info('Documentation accessed', {
     path: req.path,
     user: req.user?.id || 'unauthenticated',
@@ -34,7 +34,7 @@ function logDocumentationAccess(req: AuthRequest, res: Response, next: NextFunct
  * The swagger-parser package uses ajv-draft-04 which requires ajv/dist/core (not available in ajv v8)
  * This validation is optional and doesn't affect API functionality.
  */
-async function validateOpenAPISpec(spec: object): Promise<void> {
+async function validateOpenAPISpec(_spec: object): Promise<void> {
   // Validation disabled - see note above
   logger.info('ℹ️  OpenAPI specification validation skipped (ajv compatibility)')
   return Promise.resolve()
@@ -70,7 +70,7 @@ async function validateOpenAPISpec(spec: object): Promise<void> {
 export function setupSwagger(app: Express): void {
   try {
     // Initialize swagger-jsdoc and generate OpenAPI specification
-    const swaggerSpec = swaggerJsdoc(swaggerOptions)
+    const swaggerSpec = swaggerJsdoc(swaggerOptions) as Record<string, any>
 
     // Merge Zod-generated schemas into the spec
     swaggerSpec.components = swaggerSpec.components || {}
@@ -85,13 +85,13 @@ export function setupSwagger(app: Express): void {
     })
 
     // Serve OpenAPI spec at /api-docs/openapi.json (JSON format)
-    app.get('/api-docs/openapi.json', (req: Request, res: Response) => {
+    app.get('/api-docs/openapi.json', (_req: Request, res: Response) => {
       res.setHeader('Content-Type', 'application/json')
       res.send(swaggerSpec)
     })
 
     // Serve OpenAPI spec at /api-docs/openapi.yaml (YAML format) using js-yaml
-    app.get('/api-docs/openapi.yaml', (req: Request, res: Response) => {
+    app.get('/api-docs/openapi.yaml', (_req: Request, res: Response) => {
       res.setHeader('Content-Type', 'text/yaml')
       res.send(yaml.dump(swaggerSpec))
     })
@@ -151,7 +151,7 @@ export function setupSwagger(app: Express): void {
     `
 
     // Serve custom HTML instead of swagger-ui-express
-    app.get('/api-docs', ...accessControl, (req: Request, res: Response) => {
+    app.get('/api-docs', ...accessControl, (_req: Request, res: Response) => {
       res.setHeader('Content-Type', 'text/html')
       res.send(customHtml)
     })

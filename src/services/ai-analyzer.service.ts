@@ -81,10 +81,10 @@ export class AIAnalyzerService {
           generationConfig: { temperature: 0.3 },
         })
         this.fallbackModel = genAI.getGenerativeModel({
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-pro',
           generationConfig: { temperature: 0.3 },
         })
-        logger.info('Gemini AI models initialized (primary: 2.5-flash, fallback: 2.0-flash)')
+        logger.info('Gemini AI models initialized (primary: 2.5-flash, fallback: 2.5-pro)')
       } catch (error) {
         logger.error('Failed to initialize Gemini AI model:', error)
         this.model = null
@@ -189,6 +189,9 @@ export class AIAnalyzerService {
           const fallbackPayload = {
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: { temperature: 0.3, maxOutputTokens },
+          }
+          if (!this.fallbackModel) {
+            throw new Error('Fallback model not available')
           }
           text = await this.callWithRetry(this.fallbackModel, fallbackPayload, 1)
           usedFallback = true

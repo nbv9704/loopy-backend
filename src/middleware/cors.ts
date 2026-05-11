@@ -9,8 +9,15 @@ const allowedOrigins = [config.frontendUrl]
 
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true)
+    // In development, allow no-origin requests (Postman, curl)
+    if (!origin && config.nodeEnv === 'development') {
+      return callback(null, true)
+    }
+
+    // In production, require origin header
+    if (!origin) {
+      return callback(new Error('Origin header required'))
+    }
 
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true)
@@ -18,5 +25,6 @@ export const corsMiddleware = cors({
       callback(new Error('Not allowed by CORS'))
     }
   },
-  credentials: true,
+  credentials: true, // Allow cookies to be sent
+  exposedHeaders: ['set-cookie'], // Expose cookie headers
 })

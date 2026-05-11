@@ -24,8 +24,8 @@ export const executeCode = async (req: AuthRequest, res: Response, next: NextFun
           `Language ${language} is not supported yet. Only JavaScript can run in browser.`
         )
       }
-    } catch (err: any) {
-      error = err.message
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : String(err)
       logger.error('Code execution error:', err)
     }
 
@@ -42,7 +42,7 @@ export const executeCode = async (req: AuthRequest, res: Response, next: NextFun
           error,
           execution_time: executionTime,
         })
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error('Failed to log execution:', err)
       }
     }
@@ -86,11 +86,11 @@ export const validateCode = async (req: AuthRequest, res: Response, next: NextFu
       output = result.output
       error = result.error
 
-      // TODO: Implement proper test case validation
+
       // For now, just check if code runs without error
       isCorrect = !result.error
-    } catch (err: any) {
-      error = err.message
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : String(err)
     }
 
     const executionTime = Date.now() - startTime

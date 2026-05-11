@@ -1,7 +1,5 @@
 import { Express } from 'express'
-import express from 'express'
-import path from 'path'
-import { config } from '../config'
+
 
 /**
  * Static file serving configuration for production SPA

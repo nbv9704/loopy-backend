@@ -9,8 +9,7 @@
  */
 
 import { JavaScriptExecutor } from './javascript-executor.service'
-import { PythonExecutor } from './python-executor.service'
-import { CppExecutor } from './cpp-executor.service'
+import { PistonExecutorService } from './piston-executor.service'
 import type { ExecutionResult } from './grading.types'
 
 // ============================================================================
@@ -20,8 +19,8 @@ import type { ExecutionResult } from './grading.types'
 export interface TestCase {
   id: string
   exerciseId: string
-  input: any
-  expectedOutput: any
+  input: unknown
+  expectedOutput: unknown
   weight: number // 0-100
   timeout: number // milliseconds
   description: string
@@ -32,8 +31,8 @@ export interface TestCase {
 export interface TestCaseResult {
   testCaseId: string
   passed: boolean
-  actualOutput: any
-  expectedOutput: any
+  actualOutput: unknown
+  expectedOutput: unknown
   executionTime: number
   error: string | null
   description: string
@@ -51,13 +50,11 @@ export interface TestRunResult {
 
 export class TestRunnerService {
   private jsExecutor: JavaScriptExecutor
-  private pyExecutor: PythonExecutor
-  private cppExecutor: CppExecutor
+  private pistonExecutor: PistonExecutorService
 
   constructor() {
     this.jsExecutor = new JavaScriptExecutor()
-    this.pyExecutor = new PythonExecutor()
-    this.cppExecutor = new CppExecutor()
+    this.pistonExecutor = new PistonExecutorService()
   }
 
   /**
@@ -171,9 +168,10 @@ export class TestRunnerService {
         error: null,
         description: testCase.description,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errMessage = error instanceof Error ? error.message : String(error)
       // Handle timeout errors (Requirement 2.4)
-      if (error.message?.includes('timeout')) {
+      if (errMessage.includes('timeout')) {
         return {
           testCaseId: testCase.id,
           passed: false,
@@ -191,7 +189,7 @@ export class TestRunnerService {
         actualOutput: null,
         expectedOutput: testCase.expectedOutput,
         executionTime: Date.now() - startTime,
-        error: error.message || 'Unknown execution error',
+        error: errMessage || 'Unknown execution error',
         description: testCase.description,
       }
     }
@@ -200,14 +198,11 @@ export class TestRunnerService {
   /**
    * Build executable code that wraps user code with test input
    */
-  private buildExecutableCode(code: string, input: any, language: string): string {
+  private buildExecutableCode(code: string, input: unknown, language: string): string {
     switch (language) {
       case 'javascript': {
         // Wrap code to capture the return value of the last defined function
         const inputStr = JSON.stringify(input)
-        const inputArgs = Array.isArray(input)
-          ? input.map(v => JSON.stringify(v)).join(', ')
-          : inputStr
 
         return `
 ${code}
@@ -260,7 +255,7 @@ if __funcs:
    */
   private async executeCode(
     code: string,
-    input: any,
+    input: unknown,
     language: string,
     timeout: number
   ): Promise<ExecutionResult> {
@@ -269,23 +264,9 @@ if __funcs:
         return this.jsExecutor.execute(code, input, timeout)
 
       case 'python':
-        return this.pyExecutor.execute(code, input, timeout)
-
-      case 'cpp': {
-        // C++ needs compile + execute
-        const compileResult = await this.cppExecutor.compile(code)
-        if (!compileResult.success || !compileResult.binary) {
-          return {
-            output: null,
-            stdout: '',
-            stderr: compileResult.errors.join('\n'),
-            exitCode: 1,
-            executionTime: 0,
-            error: `Compilation Error: ${compileResult.errors.join('\n')}`,
-          }
-        }
-        return this.cppExecutor.execute(compileResult.binary, input, timeout)
-      }
+      case 'cpp':
+      case 'c++':
+        return this.pistonExecutor.execute(language, code, input, timeout)
 
       default:
         return {
@@ -331,7 +312,7 @@ if __funcs:
   /**
    * Deep equality comparison for test output
    */
-  private deepEqual(actual: any, expected: any): boolean {
+  private deepEqual(actual: unknown, expected: unknown): boolean {
     // Handle nulls/undefined
     if (actual === expected) return true
     if (actual === null || expected === null) return false
@@ -359,8 +340,10 @@ if __funcs:
       const actualKeys = Object.keys(actual).sort()
       const expectedKeys = Object.keys(expected).sort()
       if (actualKeys.length !== expectedKeys.length) return false
+      const actualObj = actual as Record<string, unknown>
+      const expectedObj = expected as Record<string, unknown>
       return actualKeys.every(
-        (key, index) => key === expectedKeys[index] && this.deepEqual(actual[key], expected[key])
+        (key, index) => key === expectedKeys[index] && this.deepEqual(actualObj[key], expectedObj[key])
       )
     }
 

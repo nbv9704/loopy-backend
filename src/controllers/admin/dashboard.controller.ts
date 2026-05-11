@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger'
  * Get dashboard overview statistics
  * GET /api/admin/stats/overview
  */
-export const getDashboardStats = async (req: Request, res: Response) => {
+export const getDashboardStats = async (_req: Request, res: Response) => {
   try {
     logger.info('Dashboard stats request started')
 

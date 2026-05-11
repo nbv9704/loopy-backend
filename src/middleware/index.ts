@@ -1,6 +1,7 @@
 import { Express } from 'express'
 import express from 'express'
 import compression from 'compression'
+import cookieParser from 'cookie-parser'
 import path from 'path'
 import { helmetMiddleware } from './security'
 import { corsMiddleware } from './cors'
@@ -22,6 +23,9 @@ export function setupMiddleware(app: Express): void {
   // Body parsing middleware
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ extended: true }))
+
+  // Cookie parsing middleware (for secure token storage)
+  app.use(cookieParser())
 
   // Compression middleware
   app.use(compression() as any)

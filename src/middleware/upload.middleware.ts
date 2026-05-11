@@ -11,10 +11,10 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure multer storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     cb(null, uploadsDir)
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     // Generate unique filename: timestamp-uuid.ext
     const timestamp = Date.now()
     const uniqueId = crypto.randomUUID()
@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 
 // File filter for image types
 const fileFilter = (
-  req: Express.Request,
+  _req: Express.Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {

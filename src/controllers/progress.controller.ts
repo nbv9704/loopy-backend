@@ -1,7 +1,7 @@
-import { Request, Response, NextFunction } from 'express'
+import { Response, NextFunction } from 'express'
 import { supabaseAdmin } from '../db/supabase'
 import { AuthRequest } from '../middleware/auth'
-import { errors } from '../middleware/errorHandler'
+import {  } from '../middleware/errorHandler'
 import { calculateUserStreak, groupProgressByLanguage } from '../services/progress.service'
 
 /**

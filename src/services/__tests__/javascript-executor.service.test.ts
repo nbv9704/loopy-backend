@@ -9,7 +9,7 @@
  */
 
 import { JavaScriptExecutor } from '../javascript-executor.service'
-import type { ExecutionResult } from '../grading.types'
+import type {  } from '../grading.types'
 
 describe('JavaScriptExecutor Service', () => {
   let executor: JavaScriptExecutor

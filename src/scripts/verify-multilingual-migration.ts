@@ -8,7 +8,7 @@
  */
 
 import { supabaseAdmin } from '../db/supabase'
-import { logger } from '../utils/logger'
+import {  } from '../utils/logger'
 
 interface VerificationResult {
   check: string
@@ -45,7 +45,7 @@ async function checkEnglishColumns() {
     for (const column of columns) {
       totalExpected++
 
-      const { data, error } = await supabaseAdmin.from(table).select(column).limit(0)
+      const { error } = await supabaseAdmin.from(table).select(column).limit(0)
 
       if (!error) {
         totalFound++
@@ -174,7 +174,7 @@ async function checkFallbackBehavior() {
   }
 
   try {
-    const { data: inserted, error: insertError } = await supabaseAdmin
+    const { data: _inserted, error: insertError } = await supabaseAdmin
       .from('landing_features')
       .insert(testData)
       .select()

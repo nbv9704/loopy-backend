@@ -216,6 +216,17 @@ export interface ServerToClientEvents {
     isMatchOver: boolean
     nextQuestionIndex?: number
   }) => void
+  'match:paused': (payload: {
+    disconnectedUserId: string
+    displayName: string
+    timeoutSeconds: number
+  }) => void
+  'match:resumed': (payload: { reconnectedUserId: string; displayName: string }) => void
+  'match:forfeit': (payload: {
+    forfeitUserId: string
+    displayName: string
+    reason: 'disconnect_timeout'
+  }) => void
 
   // Participant updates
   'participant:joined': (participant: PvPParticipant) => void
