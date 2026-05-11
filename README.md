@@ -27,7 +27,6 @@ namespace my_other_ns {
 int myresult{my_ns::foo() + my_other_ns::foo() * my_ns::my_inner_ns::baz()};
 ```
 
-~~~~exercism/advanced
 Deeply nested namespaces might be too verbose.
 It is possible to remove the verbosity with a namespace import via `using`.
 This moves all names into the global namespace.
@@ -44,4 +43,3 @@ namespace o = my_other_ns;
 
 int also_my_result{m::foo() + o::foo() * m::my_inner_ns::baz()};
 ```
-~~~~
