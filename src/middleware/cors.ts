@@ -5,7 +5,11 @@ import { config } from '../config'
  * Centralized CORS configuration
  * Extracted from index.ts to follow Single Responsibility Principle
  */
-const allowedOrigins = [config.frontendUrl]
+const allowedOrigins = [
+  config.frontendUrl,
+  'https://loopy.vercel.app',
+  'https://loopy-frontend-blond.vercel.app'
+]
 
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
@@ -14,7 +18,11 @@ export const corsMiddleware = cors({
       return callback(null, true)
     }
 
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Check if origin is allowed or matches a Vercel preview URL
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      (origin && origin.endsWith('.vercel.app'))
+
+    if (isAllowed) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
