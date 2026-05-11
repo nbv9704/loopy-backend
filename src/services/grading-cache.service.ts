@@ -51,7 +51,9 @@ export class GradingCacheService {
     try {
       this.redisClient = createClient({ 
         url: redisUrl,
-        socket: redisUrl.startsWith('rediss://') ? { tls: true, rejectUnauthorized: false } : undefined
+        socket: redisUrl.startsWith('rediss://') 
+          ? { connectTimeout: 30000, tls: true, rejectUnauthorized: false }
+          : { connectTimeout: 30000 }
       })
 
       this.redisClient.on('error', err => {
