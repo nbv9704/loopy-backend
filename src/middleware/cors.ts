@@ -9,14 +9,9 @@ const allowedOrigins = [config.frontendUrl]
 
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
-    // In development, allow no-origin requests (Postman, curl)
-    if (!origin && config.nodeEnv === 'development') {
-      return callback(null, true)
-    }
-
-    // In production, require origin header
+    // Allow no-origin requests (e.g. server-to-server, health checks, Postman)
     if (!origin) {
-      return callback(new Error('Origin header required'))
+      return callback(null, true)
     }
 
     if (allowedOrigins.indexOf(origin) !== -1) {
