@@ -374,3 +374,5 @@ If you find a bug, please open an issue on [GitHub Issues](https://github.com/yo
 ---
 
 **Note**: This is the backend API. For the complete platform, you also need the [frontend application](https://github.com/your-org/loopy-frontend).
+=======
+>>>>>>> 3fef17a8db2d0febbc269c51d85663c8740f801d
