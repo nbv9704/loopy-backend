@@ -24,7 +24,7 @@ export const getSecureCookieOptions = (maxAge: number): CookieOptions => {
   return {
     httpOnly: true, // Prevent JavaScript access (XSS protection)
     secure: isProduction, // HTTPS only in production
-    sameSite: isProduction ? 'strict' : 'lax', // Relaxed in dev to avoid port/localhost issues
+    sameSite: isProduction ? 'none' : 'lax', // 'none' is required for cross-site cookies in prod
     path: '/',
     domain: process.env.COOKIE_DOMAIN || undefined,
     maxAge, // milliseconds

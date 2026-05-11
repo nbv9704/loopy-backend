@@ -14,7 +14,7 @@ export const sessionMiddleware: any = session({
     httpOnly: true,
     secure: config.nodeEnv === 'production', // HTTPS only in production
     maxAge: config.admin.sessionMaxAge,
-    sameSite: 'lax',
+    sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
   },
   name: 'loopy.admin.sid', // Custom session cookie name
 })
