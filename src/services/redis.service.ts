@@ -34,6 +34,11 @@ export function getRedisConnection(): Redis | null {
   redisConnection = new Redis(url, {
     maxRetriesPerRequest: null, // Required by BullMQ
     enableReadyCheck: false,
+    connectTimeout: 30000, // Wait up to 30s to connect
+    retryStrategy(times) {
+      const delay = Math.min(times * 100, 3000);
+      return delay;
+    },
     tls: url.startsWith('rediss://') ? {} : undefined,
   })
 
