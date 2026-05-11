@@ -34,3 +34,9 @@ services:
         value: 50
       - key: LOG_LEVEL
         value: info
+      - key: ADMIN_SESSION_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
