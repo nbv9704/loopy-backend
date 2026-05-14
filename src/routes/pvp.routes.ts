@@ -103,6 +103,7 @@ router.post('/matches', validate(pvpSchemas.createMatch), pvpController.createMa
  *         $ref: '#/components/responses/NotFoundError'
  */
 router.get('/matches/:matchId', validate(pvpSchemas.getMatch), pvpController.getMatch)
+router.post('/matches/:matchId/join', validate(pvpSchemas.getMatch), pvpController.joinMatch)
 
 /**
  * @openapi

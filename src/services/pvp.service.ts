@@ -113,6 +113,7 @@ export const pvpService = {
           language_id: config.language_id || null,
           max_players: config.max_players,
           time_per_question: config.time_per_question,
+          difficulty: config.difficulty || 'medium',
           question_ids: questionIds,
           current_question_index: 0,
           status: 'waiting' as MatchStatus,
@@ -206,25 +207,41 @@ export const pvpService = {
       throw errors.notFound('Match')
     }
 
-    if (match.status !== 'waiting') {
-      throw errors.validationError('Match has already started or ended')
-    }
-
-    const participantCount = (match as { pvp_participants?: [{ count: number }] }).pvp_participants?.[0]?.count || 0
-    if (participantCount >= match.max_players) {
-      throw errors.validationError('Match is full')
-    }
-
-    // Check if user already joined
+    // 1. Check if user already joined
     const { data: existing } = await supabaseAdmin
       .from('pvp_participants')
       .select('*')
       .eq('match_id', matchId)
       .eq('user_id', userId)
-      .single()
+      .maybeSingle()
 
     if (existing) {
-      return existing as PvPParticipant
+      // Allow re-joining even if in_progress or starting
+      // But block if already completed or cancelled
+      if (match.status === 'completed' || match.status === 'cancelled') {
+        throw errors.validationError('Match has already ended')
+      }
+
+      // Mark as connected if they were disconnected
+      if (!existing.is_connected) {
+        await supabaseAdmin
+          .from('pvp_participants')
+          .update({ is_connected: true })
+          .eq('match_id', matchId)
+          .eq('user_id', userId)
+      }
+      return { ...existing, is_connected: true } as PvPParticipant
+    }
+
+    // 2. For NEW players, they can only join if match is 'waiting'
+    if (match.status !== 'waiting') {
+      throw errors.validationError('Match has already started or ended')
+    }
+
+    // 2. Check if match is full
+    const participantCount = (match as any).pvp_participants?.[0]?.count || 0
+    if (participantCount >= match.max_players) {
+      throw errors.validationError('Match is full')
     }
 
     // Join match

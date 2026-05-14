@@ -8,13 +8,6 @@ import { Server as HTTPServer } from 'http'
 import { config } from '../config'
 import { logger } from '../utils/logger'
 import { pvpService } from './pvp.service'
-import {
-  scheduleMatchTimer,
-  cancelMatchTimer,
-  createMatchTimerWorker,
-  getRedisConnection,
-  type MatchTimerJobName,
-} from './redis.service'
 import { supabaseAdmin } from '../db/supabase'
 import type {
   ClientToServerEvents,
@@ -30,10 +23,11 @@ export class PvPSocketService {
     InterServerEvents,
     SocketData
   >
-  private matchTimers: Map<string, NodeJS.Timeout> = new Map() // In-memory fallback when Redis is unavailable
+  private matchTimers: Map<string, NodeJS.Timeout> = new Map() // In-memory question timers
+  private questionStartTimes: Map<string, number> = new Map()
   private disconnectTimers: Map<string, NodeJS.Timeout> = new Map() // Grace period timers keyed by `matchId:userId`
   private pausedMatches: Set<string> = new Set() // Matches currently paused due to disconnect
-  private useRedis: boolean = false
+  private endingQuestions: Set<string> = new Set() // Mutex: prevent double endQuestion calls
 
   private static readonly DISCONNECT_GRACE_SECONDS = 30
 
@@ -48,7 +42,6 @@ export class PvPSocketService {
 
     this.setupMiddleware()
     this.setupEventHandlers()
-    this.setupRedisWorker()
   }
 
   /**
@@ -92,37 +85,6 @@ export class PvPSocketService {
         next(new Error('Authentication failed'))
       }
     })
-  }
-
-  /**
-   * Setup BullMQ worker to process match timer jobs from Redis.
-   * Falls back to in-memory setTimeout if Redis is not available.
-   */
-  private setupRedisWorker(): void {
-    const redis = getRedisConnection()
-    if (!redis) {
-      logger.info('Redis not available – using in-memory timers (development mode)')
-      this.useRedis = false
-      return
-    }
-
-    this.useRedis = true
-
-    createMatchTimerWorker(async (jobName: MatchTimerJobName, matchId: string) => {
-      switch (jobName) {
-        case 'endQuestion':
-          await this.endQuestion(matchId)
-          break
-        case 'cooldownNext':
-          await this.handleCooldownNext(matchId)
-          break
-        case 'cooldownComplete':
-          await this.completeMatch(matchId)
-          break
-      }
-    })
-
-    logger.info('Redis match timer worker initialized')
   }
 
   /**
@@ -259,12 +221,28 @@ export class PvPSocketService {
     try {
       const userId = socket.data.userId!
 
-      // Update participant status
-      await supabaseAdmin
-        .from('pvp_participants')
-        .update({ is_connected: false, left_at: new Date().toISOString() })
-        .eq('match_id', matchId)
-        .eq('user_id', userId)
+      // Check match status
+      const { data: match } = await supabaseAdmin
+        .from('pvp_matches')
+        .select('status')
+        .eq('id', matchId)
+        .single()
+
+      if (match?.status === 'waiting' || match?.status === 'starting') {
+        // Delete participant entirely if match hasn't started
+        await supabaseAdmin
+          .from('pvp_participants')
+          .delete()
+          .eq('match_id', matchId)
+          .eq('user_id', userId)
+      } else {
+        // Mark as left if match is in progress
+        await supabaseAdmin
+          .from('pvp_participants')
+          .update({ is_connected: false, left_at: new Date().toISOString() })
+          .eq('match_id', matchId)
+          .eq('user_id', userId)
+      }
 
       // Leave socket room
       socket.leave(matchId)
@@ -273,7 +251,7 @@ export class PvPSocketService {
       // Notify other participants
       this.io.to(matchId).emit('participant:left', { user_id: userId } as any)
 
-      logger.info(`User ${userId} left match ${matchId}`)
+      logger.info(`User ${userId} left match ${matchId} (Status: ${match?.status})`)
     } catch (error: any) {
       logger.error('Error leaving match:', error)
       socket.emit('error', { message: error.message || 'Failed to leave match' })
@@ -327,6 +305,14 @@ export class PvPSocketService {
       this.io.to(matchId).emit('participant:ready', participantWithProfile as any)
 
       // Check if all ready and start match
+      const currentMatch = await pvpService.getMatch(matchId)
+      
+      // Prevent double start if already starting or in_progress
+      if (currentMatch.status === 'starting' || currentMatch.status === 'in_progress') {
+        logger.info(`Match ${matchId} already started, skipping handleMatchReady start`)
+        return
+      }
+
       const started = await pvpService.checkAndStartMatch(matchId)
 
       if (started) {
@@ -370,26 +356,26 @@ export class PvPSocketService {
       const match = await pvpService.getMatch(matchId)
       const question = await pvpService.getCurrentQuestion(matchId)
 
-      // Emit question changed event
+      const delayMs = match.time_per_question * 1000
+
+      // 1. Record start time
+      this.questionStartTimes.set(matchId, Date.now())
+
+      // 2. Schedule timer FIRST to ensure the match progresses even if emission fails
+      await this.clearQuestionTimer(matchId)
+      const timer = setTimeout(async () => {
+        await this.endQuestion(matchId)
+      }, delayMs)
+      this.matchTimers.set(matchId, timer)
+
+      // 3. Emit question changed event
       this.io.to(matchId).emit('match:question_changed', {
         match,
         question,
         timeRemaining: match.time_per_question,
       })
 
-      const delayMs = match.time_per_question * 1000
-
-      // Schedule timer via Redis queue, fallback to in-memory
-      if (this.useRedis) {
-        await scheduleMatchTimer('endQuestion', matchId, delayMs)
-      } else {
-        const timer = setTimeout(async () => {
-          await this.endQuestion(matchId)
-        }, delayMs)
-        this.matchTimers.set(matchId, timer)
-      }
-
-      logger.info(`Question started for match ${matchId}`)
+      logger.info(`[startQuestion] Question ${match.current_question_index + 1} started for match ${matchId} (${delayMs}ms)`)
     } catch (error) {
       logger.error('Error starting question:', error)
     }
@@ -399,21 +385,36 @@ export class PvPSocketService {
    * End current question and move to next or complete match
    */
   private async endQuestion(matchId: string): Promise<void> {
+    // Mutex guard: prevent double calls
+    if (this.endingQuestions.has(matchId)) {
+      logger.warn(`[endQuestion] Already ending question for match ${matchId}, skipping duplicate call`)
+      return
+    }
+    this.endingQuestions.add(matchId)
+
     try {
       logger.info(`[endQuestion] Starting for match ${matchId}`)
 
-      // Clear timer (both Redis and in-memory)
+      // Clear timer
       await this.clearQuestionTimer(matchId)
+      this.questionStartTimes.delete(matchId)
 
       // Get match
-      const { data: match } = await supabaseAdmin
+      const { data: match, error: fetchError } = await supabaseAdmin
         .from('pvp_matches')
         .select('*')
         .eq('id', matchId)
         .single()
 
-      if (!match) {
-        logger.error(`[endQuestion] Match not found: ${matchId}`)
+      if (fetchError || !match) {
+        logger.error(`[endQuestion] Match not found or error: ${matchId}`, fetchError)
+        // Even if match not found in DB, we should attempt to clear timers
+        return
+      }
+
+      // Ensure match is still in progress or starting
+      if (match.status !== 'in_progress' && match.status !== 'starting') {
+        logger.warn(`[endQuestion] Match ${matchId} is not in a state to end question: ${match.status}. Check if match was already completed or cancelled.`)
         return
       }
 
@@ -435,25 +436,19 @@ export class PvPSocketService {
           nextQuestionIndex: nextIndex,
         })
 
-        // Schedule cooldown via Redis or fallback
-        if (this.useRedis) {
-          // Store nextIndex in Redis for the worker to pick up
-          const redis = getRedisConnection()
-          if (redis) await redis.set(`match:nextIndex:${matchId}`, nextIndex, 'EX', 30)
-          await scheduleMatchTimer('cooldownNext', matchId, 3000)
-        } else {
-          setTimeout(async () => {
-            try {
-              await supabaseAdmin
-                .from('pvp_matches')
-                .update({ current_question_index: nextIndex })
-                .eq('id', matchId)
-              await this.startQuestion(matchId)
-            } catch (e) {
-              logger.error('[endQuestion cooldown timeout] Error:', e)
-            }
-          }, 3000)
-        }
+        // Always use setTimeout for cooldown (3s is too short to need Redis persistence)
+        setTimeout(async () => {
+          try {
+            logger.info(`[cooldown] Transitioning to question ${nextIndex} for match ${matchId}`)
+            await supabaseAdmin
+              .from('pvp_matches')
+              .update({ current_question_index: nextIndex })
+              .eq('id', matchId)
+            await this.startQuestion(matchId)
+          } catch (e) {
+            logger.error('[cooldown] Error transitioning to next question:', e)
+          }
+        }, 3000)
       } else {
         logger.info(
           `[endQuestion] No more questions, entering cooldown before completing match ${matchId}`
@@ -465,59 +460,32 @@ export class PvPSocketService {
           isMatchOver: true,
         })
 
-        // Schedule final cooldown
-        if (this.useRedis) {
-          await scheduleMatchTimer('cooldownComplete', matchId, 3000)
-        } else {
-          setTimeout(async () => {
-            try {
-              await this.completeMatch(matchId)
-            } catch (e) {
-              logger.error('[endQuestion final cooldown timeout] Error:', e)
-            }
-          }, 3000)
-        }
+        // Always use setTimeout for final cooldown
+        setTimeout(async () => {
+          try {
+            logger.info(`[cooldown] Completing match ${matchId}`)
+            await this.completeMatch(matchId)
+          } catch (e) {
+            logger.error('[cooldown] Error completing match:', e)
+          }
+        }, 3000)
       }
     } catch (error) {
       logger.error('[endQuestion] Error:', error)
+      // Attempt to ensure progress even on failure if match exists
+      try {
+        this.io.to(matchId).emit('match:cooldown', { duration: 0, isMatchOver: true })
+      } catch {}
+    } finally {
+      // Release mutex after a short delay to cover the cooldown scheduling
+      setTimeout(() => this.endingQuestions.delete(matchId), 1000)
     }
   }
 
   /**
-   * Handle cooldown -> next question transition (called by Redis worker)
-   */
-  private async handleCooldownNext(matchId: string): Promise<void> {
-    try {
-      // Retrieve the next index from Redis
-      const redis = getRedisConnection()
-      let nextIndex = 1
-      if (redis) {
-        const stored = await redis.get(`match:nextIndex:${matchId}`)
-        if (stored) {
-          nextIndex = parseInt(stored, 10)
-          await redis.del(`match:nextIndex:${matchId}`)
-        }
-      }
-
-      await supabaseAdmin
-        .from('pvp_matches')
-        .update({ current_question_index: nextIndex })
-        .eq('id', matchId)
-
-      await this.startQuestion(matchId)
-    } catch (e) {
-      logger.error('[handleCooldownNext] Error:', e)
-    }
-  }
-
-  /**
-   * Clear question timer from both Redis queue and in-memory map
+   * Clear question timer (in-memory setTimeout)
    */
   private async clearQuestionTimer(matchId: string): Promise<void> {
-    if (this.useRedis) {
-      await cancelMatchTimer('endQuestion', matchId)
-    }
-
     const timer = this.matchTimers.get(matchId)
     if (timer) {
       clearTimeout(timer)
@@ -557,7 +525,7 @@ export class PvPSocketService {
       const userIds = participants.map((p: any) => p.user_id)
       const { data: profiles } = await supabaseAdmin
         .from('user_profiles')
-        .select('id, display_name')
+        .select('id, display_name, avatar_url')
         .in('id', userIds)
 
       // Create profile map
@@ -891,12 +859,26 @@ export class PvPSocketService {
     // Notify other participants
     this.io.to(matchId).emit('participant:disconnected', userId)
 
-    // Check if the match is actively in progress
+    // Check match status
     const { data: match } = await supabaseAdmin
       .from('pvp_matches')
       .select('status')
       .eq('id', matchId)
       .single()
+
+    // If the match is still in waiting, delete the participant record
+    // so someone else can join the lobby.
+    if (match?.status === 'waiting') {
+      await supabaseAdmin
+        .from('pvp_participants')
+        .delete()
+        .eq('match_id', matchId)
+        .eq('user_id', userId)
+      
+      this.io.to(matchId).emit('participant:left', { user_id: userId } as any)
+      logger.info(`User ${userId} disconnected from lobby ${matchId} — removed participant`)
+      return
+    }
 
     if (!match || match.status !== 'in_progress') return
 

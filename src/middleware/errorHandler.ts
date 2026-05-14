@@ -63,5 +63,6 @@ export const errors = {
   executionError: (message: string) => new AppError(400, 'EXECUTION_ERROR', message),
   databaseError: (message: string, details?: any) =>
     new AppError(500, 'DATABASE_ERROR', message, details),
+  badRequest: (message: string) => new AppError(400, 'BAD_REQUEST', message),
   unauthorized: (message: string = 'Unauthorized access') => new AppError(401, 'UNAUTHORIZED', message),
 }

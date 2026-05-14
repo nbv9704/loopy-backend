@@ -64,6 +64,51 @@ export const getMatch = async (req: AuthRequest, res: Response, next: NextFuncti
 }
 
 /**
+ * Join a specific match by ID or Room Code
+ * POST /api/pvp/matches/:matchId/join
+ */
+export const joinMatch = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) {
+      throw errors.unauthorized()
+    }
+
+    const { matchId } = req.params
+
+    // 1. Find the match (could be ID or Room Code)
+    const match = await pvpService.getMatch(matchId)
+
+    // 2. Check if already full
+    const { data: participants } = await supabaseAdmin
+      .from('pvp_participants')
+      .select('user_id')
+      .eq('match_id', match.id)
+
+    const isAlreadyIn = participants?.some(p => p.user_id === userId)
+    if (!isAlreadyIn && participants && participants.length >= match.max_players) {
+      throw errors.badRequest('Match is already full')
+    }
+
+    // 3. Join the match in DB
+    const participant = await pvpService.joinMatch(match.id, userId)
+
+    // 4. Notify other participants via socket
+    const io = (req.app as any).get('io')
+    if (io) {
+      io.to(match.id).emit('participant:joined', participant)
+    }
+
+    res.json({
+      success: true,
+      data: { match },
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/**
  * Find or create a match (matchmaking)
  * POST /api/pvp/matchmaking
  */
@@ -79,11 +124,21 @@ export const findMatch = async (req: AuthRequest, res: Response, next: NextFunct
     logger.info('Matchmaking request:', { userId, language_id, difficulty, mode })
 
     // Try to find an existing waiting match
-    const { data: existingMatches, error: searchError } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('pvp_matches')
       .select('*, pvp_participants(count)')
       .eq('status', 'waiting')
       .eq('mode', mode)
+
+    if (difficulty) {
+      query = query.eq('difficulty', difficulty)
+    }
+
+    if (language_id) {
+      query = query.eq('language_id', language_id)
+    }
+
+    const { data: existingMatches, error: searchError } = await query
 
     if (searchError) {
       logger.error('Search error:', searchError)

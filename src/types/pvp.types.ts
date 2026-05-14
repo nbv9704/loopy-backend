@@ -43,6 +43,7 @@ export interface PvPMatch {
   mode: MatchMode
   status: MatchStatus
   language_id: string | null
+  difficulty: 'easy' | 'medium' | 'hard'
   room_code: string
 
   // Questions
@@ -190,6 +191,9 @@ export interface ClientToServerEvents {
   // Typing indicator (for code challenges)
   'typing:start': (matchId: string) => void
   'typing:stop': (matchId: string) => void
+
+  // Safety trigger from client when timer reaches 0
+  'match:timer_expired': (payload: { matchId: string }) => void
 }
 
 // Server -> Client Events
