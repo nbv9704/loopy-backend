@@ -1,0 +1,67 @@
+{
+  "chapter_id": "a94d9480-6487-4c9e-95dc-dea43cb75cff",
+  "lessons": [
+    {
+      "lesson_id": "hello-world-import1",
+      "title": "1. Bài học Bulk Import đầu tiên",
+      "description": "Đây là bài học mẫu được tạo từ tính năng Bulk Import.",
+      "starter_code": "console.log('Xin chao');",
+      "task_description": "Hãy sửa đoạn code để in ra dòng chữ 'Hello World!' thay vì 'Xin chao'.",
+      "hint": "Dùng console.log('Hello World!');",
+      "common_mistakes": "Quên dấu chấm phẩy hoặc viết sai chính tả chữ World.",
+      "solution_code": "console.log('Hello World!');",
+      "is_aha_lesson": false,
+      "difficulty": "beginner",
+      "grading_mode": "stdout",
+      "order_index": 100,
+      "test_cases": [
+        {
+          "order_index": 1,
+          "description": "Phải in ra đúng Hello World!",
+          "input": [],
+          "expected_output": "Hello World!\n",
+          "weight": 100,
+          "timeout": 1000,
+          "is_hidden": false
+        }
+      ]
+    },
+    {
+      "lesson_id": "sum-function-import1",
+      "title": "2. Hàm tính tổng (Bulk Import)",
+      "description": "Bài học này yêu cầu bạn viết một hàm tính tổng hai số.",
+      "starter_code": "function sum(a, b) {\n  // Viết code ở đây\n}",
+      "task_description": "Hoàn thiện hàm `sum(a, b)` trả về tổng của `a` và `b`.",
+      "hint": "Sử dụng từ khóa `return a + b;`",
+      "solution_code": "function sum(a, b) {\n  return a + b;\n}",
+      "difficulty": "intermediate",
+      "grading_mode": "function",
+      "order_index": 101,
+      "test_cases": [
+        {
+          "order_index": 1,
+          "description": "Tổng 1 + 2 = 3",
+          "input": [
+            1,
+            2
+          ],
+          "expected_output": 3,
+          "weight": 50,
+          "timeout": 1000
+        },
+        {
+          "order_index": 2,
+          "description": "Tổng -5 + 10 = 5",
+          "input": [
+            -5,
+            10
+          ],
+          "expected_output": 5,
+          "weight": 50,
+          "timeout": 1000,
+          "is_hidden": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: loopy-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: yarn install --frozen-lockfile && yarn build
+    startCommand: yarn start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: PORT
+        value: 3000
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        value: https://loopy.vercel.app
+      - key: CODE_EXECUTION_TIMEOUT
+        value: 5000
+      - key: MAX_CODE_LENGTH
+        value: 10000
+      - key: RATE_LIMIT_WINDOW
+        value: 15
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: 100
+      - key: RATE_LIMIT_CODE_EXECUTION
+        value: 50
+      - key: LOG_LEVEL
+        value: info
+      - key: SWAGGER_REQUIRE_AUTH
+        value: "true"
+      - key: ADMIN_SESSION_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

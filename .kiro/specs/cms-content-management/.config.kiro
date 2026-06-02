@@ -1,0 +1,9 @@
+{
+  "specType": "feature",
+  "workflowType": "design-first",
+  "featureName": "cms-content-management",
+  "displayName": "CMS - Content Management System",
+  "description": "Tính năng quản lý nội dung tĩnh (text, navigation, translations) trong admin UI",
+  "createdAt": "2026-05-29",
+  "status": "in-progress"
+}
