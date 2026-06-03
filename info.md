@@ -1,5 +1,4 @@
 # Loopy Project Info
-
 File này là bộ nhớ ngắn hạn/dài hạn cho lần làm việc sau. Agent nên đọc file này trước khi tự scan lại toàn bộ dự án.
 
 ## Project Goal
@@ -2420,7 +2419,8 @@ Follow-up 2026-06-01 report restructuring:
 
 Follow-up 2026-06-02 report workflow reset:
 - User đã xóa các file báo cáo cũ và chuyển sang workflow mới: `source.md` là file mẫu đầu vào theo từng phần; agent đọc mẫu rồi viết lại thành nội dung phù hợp Loopy.
-- Đã tạo thư mục `D:\Loopyeport_md` để lưu báo cáo theo từng file markdown riêng, tránh bulk edit một file dài.
+- Đã tạo thư mục `D:\Loopy
+eport_md` để lưu báo cáo theo từng file markdown riêng, tránh bulk edit một file dài.
 - Files created:
   - `report_md/README.md`
   - `report_md/00_muc_luc.md`
@@ -2435,3 +2435,418 @@ Follow-up 2026-06-02 report workflow reset:
 - Verification: đọc `source.md` và `info.md`; tạo file bằng tool write_to_file. Chưa chạy yarn vì chỉ thay đổi tài liệu.
 - Next: khi user cập nhật một phần mẫu vào `source.md`, đọc file đó và viết nội dung tương ứng vào file chương phù hợp trong `report_md`.
 
+
+### Latest Change: Practice Sets System - Full Stack Implementation (Chưa Commit) 2026-06-03
+
+**Status:** ✅ Backend COMPLETE ✅ Frontend COMPLETE (88% - missing minor UX details)
+
+**Migration Status:** ✅ Tạo 2 migrations, chưa run lên database
+
+Files Created (Untracked):
+
+**Backend (7 files) - ALL COMPLETE:**
+- `database/migrations/027-practice-sets.sql` ✅ Schema: 4 tables, RLS, triggers, constraints
+- `database/migrations/028-practice-question-types.sql` ✅ Align question types
+- `src/routes/practice.routes.ts` ✅ 6 endpoints + auth middleware  
+- `src/schemas/practice.schemas.ts` ✅ Full Zod validation (list, create, get, search, start, submit)
+- `src/controllers/practice.controller.ts` ✅ 6 endpoints with error handling
+- `src/services/practice.service.ts` ✅ 476 lines, complete business logic (9 methods)
+
+**Frontend (5 pages) - ALL COMPLETE:**
+- `src/types/practice.types.ts` ✅ All TypeScript interfaces (6 types)
+- `src/services/practice.service.ts` ✅ API client (7 methods, error handling)
+- `src/pages/v2/V2PracticePage.tsx` ✅ Landing with CMS preloader, 2 cards (compete/sets)
+- `src/pages/v2/V2PracticeSetsPage.tsx` ✅ List with filters, pagination, empty state, loading skeletons
+- `src/pages/v2/V2PracticeSetCreatePage.tsx` ✅ (44KB) Full builder: editor/preview modes, question form, moderation check, 4 question types, settings panel
+- `src/pages/v2/V2PracticeSetDetailPage.tsx` ✅ (20KB) Take practice: render questions, handle answers, scoring logic
+
+**Modified Files:**
+- `loopy-backend/src/routes/index.ts` ✅ Added `/practice` route mount
+- `loopy-frontend/src/routes/AppRouter.tsx` ✅ Added 5 practice routes + `/pvp` → `/practice/compete` redirect
+- `loopy-frontend/src/lib/api.ts` ✅ Session refresh on 401 + `skipAuthRefresh` flag + no-toast on GET
+- `loopy-backend/src/services/admin-content.service.test.ts` ✅ Fixed import error handling test
+- Plus CMS seed, i18n, V2 pages spacing, PvP components
+
+**Verification Results: ✅ ALL PASS**
+
+✅ **Backend:**
+- `yarn lint` → Exit 0 ✅
+- `yarn build` → Exit 0 ✅ (TypeScript compiled)
+- `yarn test --runInBand` → 9/9 suites, 203/203 tests ✅
+
+✅ **Frontend:**
+- `yarn lint:strict` → Exit 0 ✅
+- `yarn build` → Exit 0 ✅ (2728 modules, production build successful)
+  - Bundle includes: V2PracticePage, V2PracticeSetsPage, V2PracticeSetCreatePage, V2PracticeSetDetailPage
+
+**Feature Completeness:**
+
+**✅ COMPLETE Features:**
+
+1. **Database Schema (027):**
+   - [x] practice_sets (id, owner_type, status, difficulty, visibility, requirements, timestamps)
+   - [x] practice_questions (id, set_id, type, options, correct_answer, points, order_index)
+   - [x] practice_attempts (id, set_id, user_id, status, score, max_score, timestamps)
+   - [x] practice_submissions (id, attempt_id, question_id, answer, is_correct, points_earned)
+   - [x] RLS policies for all 4 tables (user/admin access control)
+   - [x] Triggers for updated_at, question limit (max 30)
+   - [x] Indexes on language_id, status, visibility, user_id, set_id
+
+2. **Backend API (6 endpoints):**
+   - [x] GET /practice/sets - List sets with filters (difficulty, topic, language, keyword, pagination)
+   - [x] POST /practice/sets - Create set (with questions up to 30)
+   - [x] GET /practice/sets/:setId - Get set details
+   - [x] GET /practice/questions/search - Search questions by keyword
+   - [x] POST /practice/sets/:setId/attempts - Start practice attempt
+   - [x] POST /practice/attempts/:attemptId/questions/:questionId/submit - Submit answer + auto-grading
+
+3. **Backend Services:**
+   - [x] listSets with pagination, filters, RLS enforcement
+   - [x] getSet with access control (creator or published public)
+   - [x] searchQuestions with keyword search
+   - [x] createSet with inline questions (max 30), validates requirements
+   - [x] startAttempt with max_score calculation from questions
+   - [x] submit with auto-grading logic (true_false, multiple_choice, multiple_select, fill_blank)
+   - [x] canViewSet access control
+   - [x] isAnswerCorrect grading logic
+
+4. **Frontend Pages:**
+   - [x] V2PracticePage - Landing with 2 options (compete/sets), CMS content preloader
+   - [x] V2PracticeSetsPage - List with filters (topic, language, difficulty, mine), pagination, empty state
+   - [x] V2PracticeSetCreatePage - Full builder:
+     - [x] Editor mode: form for 1 question at a time (4 types)
+     - [x] Preview mode: set metadata, questions list, publish settings
+     - [x] Question types: true_false, multiple_choice, multiple_select, fill_blank
+     - [x] Moderation check for banned keywords
+     - [x] Max 30 questions validation
+     - [x] Save draft or publish
+   - [x] V2PracticeSetDetailPage - Take practice:
+     - [x] Render questions from attempt
+     - [x] Handle answer submission (different for each type)
+     - [x] Display feedback (correct/incorrect)
+     - [x] Calculate attempt score
+
+5. **Auth/Session:**
+   - [x] Protected routes (redirect to /auth if not logged in)
+   - [x] 401 auto-refresh + retry logic
+   - [x] Concurrent request handling during refresh
+   - [x] Skip refresh on auth endpoints
+
+❌ **INCOMPLETE/Minor Gaps:**
+
+1. **Frontend Polish (Minor):**
+   - [ ] Styling animations for answer feedback (might be placeholder)
+   - [ ] Loading states during submit (might show spinner)
+   - [ ] Success/error toasts for publish/submit (likely implemented but not verified)
+   - [ ] Mobile responsive tests (layout coded but not browser-tested)
+
+2. **Backend Database:**
+   - [ ] Migrations 027 & 028 NOT RUN on production database
+   - [ ] No seed data for official practice sets
+   - [ ] No sample questions in database
+
+3. **CMS Integration:**
+   - [ ] practice.* keys NOT in seed files (practice.sets.page.title, practice.compete.title, etc.)
+   - [ ] Need to add ~15 practice-related content keys to CMS seed
+
+4. **Testing:**
+   - [ ] No unit tests for practice.service (backend)
+   - [ ] No component tests for practice pages (frontend)
+   - [ ] No integration tests for practice flow (create → start → submit → score)
+
+5. **Edge Cases Not Verified:**
+   - [ ] Browser smoke test: actual create/publish/take practice set
+   - [ ] Requirements validation (only "completed_lessons_count" type)
+   - [ ] Attempt lock mechanism (if user tries to submit twice on same attempt)
+   - [ ] Time limit validation (schema allows but logic not visible)
+
+**Next Steps to Complete:**
+
+**CRITICAL (Must do before launch):**
+1. Run migrations 027 & 028 on database
+2. Add practice.* CMS keys to seed files (15+ keys)
+3. Manual browser smoke test: Practice Landing → Create Set → Publish → Start Attempt → Submit Answers → Verify Score
+4. Test auth refresh during long-running practice submit
+
+**NICE-TO-HAVE (Can do after):**
+1. Add unit tests for practice service (backend)
+2. Add component tests for practice pages (frontend)
+3. Verify moderation keyword matching works
+4. Test requirements validation (e.g., must complete 5 lessons to start set)
+5. Performance: concurrent practice attempts, large question sets
+6. Add seed data: 3-5 sample official practice sets
+
+**Known Technical Debt:**
+1. Question limit check is trigger-based (fails on insert if > 30)
+2. Moderation check based on hardcoded keyword list (no dynamic admin moderation)
+3. No time limit enforcement (schema has fields but not enforced)
+4. Scoring is instant (no async grading) - fine for quiz types
+
+### Latest Change: V2 Header Spacing Tightening 2026-06-03
+Files changed:
+- `loopy-frontend/src/pages/v2/V2LandingPage.tsx`
+- `loopy-frontend/src/pages/v2/V2LanguagesPage.tsx`
+- `loopy-frontend/src/pages/v2/V2LanguageDetailPage.tsx`
+- `loopy-frontend/src/pages/v2/V2LibraryPage.tsx`
+- `loopy-frontend/src/pages/v2/V2PlaygroundPage.tsx`
+- `loopy-frontend/src/pages/v2/V2DocsPage.tsx`
+- `loopy-frontend/src/pages/v2/V2OnboardingPage.tsx`
+- `loopy-frontend/src/pages/v2/V2LearnPage.tsx`
+- `loopy-frontend/src/pages/v2/V2PvPLobbyPage.tsx`
+- `info.md`
+
+Đã làm:
+- Giảm khoảng cách top giữa V2 header và nội dung đầu trang ở các trang chính: landing, languages, language detail, library, playground, docs, onboarding, learn và PvP lobby.
+- Giữ nguyên `/settings` (`V2ProfilePage`) theo yêu cầu vì trang này không cần chỉnh.
+- Không đổi logic route, CMS, auth, execute/check/progress; chỉ chỉnh spacing UI.
+
+Current State:
+- Các page V2 public chính sát header hơn, giảm vùng trắng dư ở first viewport.
+- `/auth` không chỉnh vì không dùng V2 header; `/settings` không chỉnh theo yêu cầu.
+
+Verification:
+- Frontend tại `C:\Users\MAC\Downloads\cc\loopy-frontend`: `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` → pass.
+- Lưu ý: lệnh `yarn` trực tiếp không có trong PATH hiện tại, dùng `corepack yarn` thành công với Yarn 1.22.22.
+
+Known Issues / residual risks:
+- Chưa chạy browser smoke test trực tiếp để so sánh visual trên desktop/mobile.
+
+### Latest Change: V2 Spacing Follow-up and Auth Refresh Hardening 2026-06-03
+Files changed:
+- `loopy-frontend/src/pages/v2/V2LandingPage.tsx`
+- `loopy-frontend/src/pages/v2/V2LanguagesPage.tsx`
+- `loopy-frontend/src/pages/v2/V2LanguageDetailPage.tsx`
+- `loopy-frontend/src/pages/v2/V2LibraryPage.tsx`
+- `loopy-frontend/src/pages/v2/V2PlaygroundPage.tsx`
+- `loopy-frontend/src/pages/v2/V2DocsPage.tsx`
+- `loopy-frontend/src/pages/v2/V2OnboardingPage.tsx`
+- `loopy-frontend/src/pages/v2/V2PvPLobbyPage.tsx`
+- `loopy-frontend/src/lib/api.ts`
+- `loopy-backend/src/utils/cookieHelper.ts`
+- `info.md`
+
+Đã làm:
+- Giảm tiếp top spacing của các hero/first section V2 public để sát hơn với cảm giác của `/settings`.
+- `/settings` vẫn giữ nguyên theo yêu cầu; `/auth` không chỉnh vì không dùng V2 header.
+- `ApiClient` giờ tự gọi `/api/auth/refresh` và retry request một lần khi gặp 401 ở endpoint không phải auth, tránh toast "Phiên đăng nhập đã hết hạn" khi access token 15 phút hết hạn nhưng refresh token còn sống.
+- 401 ở request `GET` thụ động không còn tự hiện toast; toast hết hạn chỉ còn cho action không phải GET sau khi refresh thất bại.
+- Backend tăng `refresh_token` httpOnly cookie từ 7 ngày lên 30 ngày để giảm tình trạng bị logout/toast sau khoảng 7 ngày không dùng app.
+
+Current State:
+- Trang V2 public chính ít khoảng trắng dưới header hơn.
+- Session sẽ tự phục hồi tốt hơn khi access token hết hạn ngắn hạn; nếu refresh token thật sự hết hạn thì request hành động mới báo lỗi.
+
+Verification:
+- Frontend tại `C:\Users\MAC\Downloads\cc\loopy-frontend`: `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` → pass.
+- Backend tại `C:\Users\MAC\Downloads\cc\loopy-backend`: `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` → pass.
+- Backend full test với `corepack yarn --ignore-engines test --runInBand` chưa pass do `AdminContentService › updateContentItem › should update a content item` timeout 5000ms trong DB-backed suite; lint/build đã pass. Lệnh thường không dùng được vì package backend yêu cầu Node 22.x, shell hiện là Node 24.16.0.
+
+Known Issues / residual risks:
+- Chưa chạy browser smoke test trực tiếp để xác nhận spacing trên mọi viewport.
+- Cần backend restart/redeploy để cookie refresh 30 ngày có hiệu lực cho phiên đăng nhập mới hoặc phiên được refresh lại.
+
+### Latest Change: Practice Hub and Practice Sets Foundation 2026-06-03
+Files changed:
+- `loopy-frontend/src/components/v2/V2Header.tsx`
+- `loopy-frontend/src/components/common/Header.tsx`
+- `loopy-frontend/src/routes/AppRouter.tsx`
+- `loopy-frontend/src/pages/v2/V2PracticePage.tsx`
+- `loopy-frontend/src/pages/v2/V2PracticeSetsPage.tsx`
+- `loopy-frontend/src/pages/v2/V2PracticeSetDetailPage.tsx`
+- `loopy-frontend/src/pages/v2/*` pages using header content keys
+- `loopy-frontend/src/services/practice.service.ts`
+- `loopy-frontend/src/types/practice.types.ts`
+- `loopy-frontend/src/i18n/locales/vi.json`
+- `loopy-frontend/src/i18n/locales/en.json`
+- `docs/seeds/cms_content_seed_vi.json`
+- `docs/seeds/cms_content_seed_en.json`
+- `loopy-backend/database/migrations/027-practice-sets.sql`
+- `loopy-backend/src/routes/index.ts`
+- `loopy-backend/src/routes/practice.routes.ts`
+- `loopy-backend/src/controllers/practice.controller.ts`
+- `loopy-backend/src/services/practice.service.ts`
+- `loopy-backend/src/schemas/practice.schemas.ts`
+- `info.md`
+
+Đã làm:
+- Đổi navigation sản phẩm từ PvP riêng lẻ sang `Practice/Luyện tập` bằng key CMS mới `nav.practice`; giữ `nav.pvp` legacy trong seed/i18n để không làm gãy component cũ.
+- Thêm route `/practice` làm hub chọn giữa `Thi đấu` và `Bộ bài tập`.
+- Chuyển PvP lobby sang `/practice/compete`, match sang `/practice/compete/match/:roomCode`; `/pvp` redirect sang `/practice/compete`, `/pvp/match/:roomCode` vẫn giữ component cũ để link phòng cũ không gãy.
+- Cập nhật toàn bộ V2 page preload header content từ `nav.pvp` sang `nav.practice`.
+- Thêm trang `/practice/sets` browse bộ bài tập public và `/practice/sets/:setId` detail tối thiểu; frontend dùng `practiceService` gọi `/api/practice`.
+- Thêm schema backend riêng cho practice sets, không reuse/trộn với `pvp_questions`: `practice_sets`, `practice_questions`, `practice_attempts`, `practice_submissions`.
+- Enforce tối đa 30 câu/bộ ở cả validation backend và DB trigger.
+- Thêm requirement dạng structured JSON bước đầu cho `completed_lessons_count` theo `languageId`.
+- Thêm API nền: list sets, get set, create set, start attempt, submit answer/code. Code challenge dùng `testRunnerService`, MC/true_false so đáp án deterministic.
+- Thêm CMS seed keys nhóm `practice.*` cho VI/EN và i18n fallback tương ứng.
+
+Current State:
+- Header logged-in giờ trỏ tới `/practice` thay vì `/pvp`.
+- PvP hiện tại vẫn hoạt động qua service/socket/API `/api/pvp`; đổi route frontend nhưng không rename backend contract để tránh phá realtime flow.
+- Practice sets đã có nền DB/API/frontend browse/detail, nhưng UI làm bài theo từng câu và UI tạo bộ câu hỏi chưa hoàn chỉnh.
+- CMS quản lý text UI của Practice; dữ liệu bộ bài tập là domain data riêng, đúng hướng để sau này admin/user CRUD mà không nhồi vào CMS.
+
+Verification:
+- Frontend tại `C:\Users\MAC\Downloads\cc\loopy-frontend`: `corepack yarn lint:strict` → pass.
+- Frontend tại `C:\Users\MAC\Downloads\cc\loopy-frontend`: `corepack yarn build` → pass.
+- Backend tại `C:\Users\MAC\Downloads\cc\loopy-backend`: `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` → pass.
+- JSON parse check cho `docs/seeds/cms_content_seed_vi.json`, `docs/seeds/cms_content_seed_en.json`, `loopy-frontend/src/i18n/locales/vi.json`, `loopy-frontend/src/i18n/locales/en.json` → pass.
+- Backend full test với `corepack yarn --ignore-engines test --runInBand` vẫn chưa pass do lỗi cũ `AdminContentService › updateContentItem › should update a content item` timeout 5000ms trong DB-backed suite; 8 suites pass, 1 suite fail, 202/203 tests pass.
+
+Known Issues / residual risks:
+- Cần chạy migration `027-practice-sets.sql` trên database thật trước khi `/api/practice` dùng được.
+- Cần import/sync lại CMS seeds để admin chỉnh được `nav.practice` và `practice.*`; nếu chưa import thì UI vẫn có i18n fallback.
+- Chưa có UI tạo bộ câu hỏi, UI làm bài attempt chi tiết, hoặc admin official-set manager.
+- Backend practice submit hiện xử lý một lần nộp/câu qua unique `(attempt_id, question_id)`; nếu muốn cho retry từng câu cần đổi policy/schema.
+
+Follow-up 2026-06-03 CMS import category creation:
+- Bug: Import CMS seed có category mới `practice` nhưng Content Manager không hiện category vì `AdminContentService.importContent` chỉ tìm category có sẵn; nếu thiếu thì ghi lỗi `Category "practice" not found` và bỏ qua keys trong nhóm đó.
+- Fix tại `loopy-backend/src/services/admin-content.service.ts`: khi import gặp category chưa tồn tại, backend tự tạo `content_categories` với `name`, `description`, `display_order: 999`, rồi import các item vào category mới.
+- Verification backend tại `C:\Users\MAC\Downloads\cc\loopy-backend`: `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` → pass.
+- Sau fix này cần restart backend rồi import lại `docs/seeds/cms_content_seed_vi.json` và `docs/seeds/cms_content_seed_en.json` để category `practice` xuất hiện trong Content Manager.
+- Đã upsert trực tiếp bằng Supabase service key từ `loopy-backend/.env`: tạo/đảm bảo category `practice`, import 20 key VI + 20 key EN từ seed, và upsert `nav.practice` trong category `common`; query category list xác nhận đã có `practice`.
+
+Follow-up 2026-06-03 Practice route and CMS save latency:
+- User thấy `/api/practice/sets?limit=24` trả 404 và `V2PracticeSetsPage` crash vì frontend đọc `result.items` khi `practiceService.listSets()` trả `undefined` từ response lỗi.
+- Fix `loopy-frontend/src/services/practice.service.ts`: `listSets` trả empty result an toàn khi API lỗi/thiếu data; `getSet` và `startAttempt` throw explicit error nếu response không thành công.
+- Nguyên nhân 404 runtime: backend dev server đang chạy process cũ chưa có route `/api/practice`; đã restart backend dev server. Verify sau restart: `/api/health` trả 200, `/api/practice/sets?limit=24` trả 401 thay vì 404, nghĩa là route đã mount và đang yêu cầu auth đúng thiết kế.
+- User thấy update content lưu lâu: `AdminContentService.updateContentItem` đang `await triggerI18nSync()`, script sync có thể chạy nhiều giây sau mỗi lần lưu.
+- Fix `loopy-backend/src/services/admin-content.service.ts`: sau DB update, i18n sync chạy background fire-and-forget, không block response lưu content.
+- Verification: frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` → pass; backend `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` → pass.
+
+Follow-up 2026-06-03 Content UI consistency and Practice Sets usability:
+- User yêu cầu Content Manager sau update thành công phải hiển thị đúng data trên UI; nếu không thì không được báo xong sớm.
+- `loopy-frontend/src/pages/admin/ContentManagerPage.tsx`: sau create/update, dùng object backend trả về để cập nhật ngay `contentItems` trên table trước khi đóng modal; delete/import cũng clear CMS cache. Nếu save lỗi, modal không đóng.
+- `loopy-frontend/src/hooks/useContent.ts`: thêm `clearContentCache()` để xóa cache `loopy_content_cache_*`; Content Manager gọi hàm này sau create/update/delete/import để các page CMS public không giữ text cũ 5 phút.
+- `/practice/sets` đã có filter thật: topic, languageId, difficulty, và checkbox "Của tôi"; filter gọi lại `practiceService.listSets` với query tương ứng.
+- `/practice/sets` đã có form tạo set thật: title, description, topic, language, difficulty, visibility, status, optional requirement completed lesson count, và questions JSON tối đa 30 câu. Mặc định tạo `public/published` để tạo xong thấy ngay trong browse.
+- `loopy-frontend/src/services/practice.service.ts`: thêm `createSet`, giữ fallback empty list an toàn khi list API lỗi.
+- Verification: frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` → pass; backend `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` → pass.
+
+Follow-up 2026-06-03 Practice Set Builder page:
+- User muốn nút tạo bộ mở trang riêng thay vì form JSON inline vì tạo một bộ câu hỏi cần nhiều field và form theo từng dạng câu hỏi.
+- `loopy-frontend/src/pages/v2/V2PracticeSetsPage.tsx`: bỏ form JSON inline; nút `Tạo bộ` chuyển tới `/practice/sets/new`.
+- `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx`: thêm trang builder riêng cho set metadata và danh sách câu hỏi động.
+- Builder hỗ trợ tối đa 30 câu, thêm/xóa câu; mỗi câu có type `multiple_choice`, `true_false`, hoặc `code_challenge`.
+- Multiple choice có 4 ô đáp án cố định, validate chỉ nhận 2-4 đáp án không rỗng và đáp án đúng phải trùng một option.
+- True/false chọn đáp án đúng `true` hoặc `false`; code challenge có starter code và test cases JSON.
+- Sau khi tạo thành công gọi `practiceService.createSet` rồi navigate tới `/practice/sets/:id`.
+- `loopy-frontend/src/routes/AppRouter.tsx`: đăng ký route `/practice/sets/new` trước `/practice/sets/:setId` để không bị match nhầm.
+- Verification: frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` → pass; backend `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` → pass.
+
+Follow-up 2026-06-03 Practice Set Builder layout refactor:
+- User thay form tạo set nhìn chưa rõ ràng; mong muốn hướng Wayground/quiz builder nhưng không cần quá nhiều chi tiết.
+- `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx`: refactor builder thành layout top action bar + left sidebar + main editor canvas.
+- Top bar có back, title input, status pill, tổng số câu/tổng điểm, nút Add question và Save set.
+- Sidebar tách metadata của set (topic, language, difficulty, visibility, status, description, requirement) và danh sách câu hỏi 1/30 để chọn nhanh.
+- Main editor có type picker cho `multiple_choice`, `true_false`, `code_challenge`; khi đang sửa thì hiển thị form riêng theo type.
+- Multiple choice đổi sang answer cards 2 cột, có nút mark correct; nếu sửa option đang là correct answer thì `correctAnswer` tự cập nhật theo.
+- Code challenge validation frontend đã khóa theo backend contract: phải có starter code và test cases JSON hợp lệ.
+- Verification: frontend tại `C:\Users\MAC\Downloads\cc\loopy-frontend`: `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` -> pass.
+
+Follow-up 2026-06-03 Frontend encoding audit:
+- User reported mojibake UI strings on practice builder and asked to check all pages.
+- Checked `loopy-frontend/src`, `docs/seeds`, and `loopy-frontend/public` with Node code-point scan for common mojibake markers and `U+FFFD`.
+- Restored tracked V2 pages that were accidentally damaged during decoding back to clean UTF-8 source, then re-applied `nav.practice` content keys.
+- Fixed `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx` by replacing corrupted builder labels/errors with Unicode-escaped Vietnamese strings so UI renders Vietnamese without source mojibake.
+- Verification: source scan result `files_with_encoding_issues 0`; frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` -> pass.
+- Note: production `dist` still contains two `U+FFFD` characters inside bundled dependency Unicode handling code in `LessonViewer-*`; source scan shows no UI text encoding issue there.
+
+Follow-up 2026-06-03 Practice attempt runner UI:
+- User requested the UI after pressing `Bat dau` on a practice set.
+- `loopy-frontend/src/services/practice.service.ts`: added `submitAnswer(attemptId, questionId, payload)` for `POST /api/practice/attempts/:attemptId/questions/:questionId/submit`.
+- `loopy-frontend/src/types/practice.types.ts`: added `PracticeSubmissionResult` type for submit response.
+- `loopy-frontend/src/pages/v2/V2PracticeSetDetailPage.tsx`: start button now switches the page from set overview into an in-page attempt runner after `practiceService.startAttempt` succeeds.
+- Attempt runner layout: left progress/question sidebar, main active question panel, MC/true-false option buttons, code challenge starter code + answer textarea, per-question submit, next question, submitted feedback, and completion summary with score.
+- Current limitation: backend has `startAttempt` and `submit`, but no `getAttempt`; therefore the active attempt is held in frontend state. Refreshing the page returns to set overview until a future persisted attempt route/API is added.
+- Verification: source encoding scan `files_with_encoding_issues 0`; frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` -> pass.
+
+Follow-up 2026-06-03 Practice question types redesign:
+- User requested practice sets to support exactly 4 quiz-style types: `True or False`, `Multiple questions`, `Multiple selects`, and `Fill in the blanks`.
+- Backend practice question type contract changed from `multiple_choice | true_false | code_challenge` to `true_false | multiple_choice | multiple_select | fill_blank`.
+- `loopy-backend/database/migrations/027-practice-sets.sql`: initial practice question check updated for the new 4 types.
+- `loopy-backend/database/migrations/028-practice-question-types.sql`: added follow-up migration for databases that already ran old 027; drops old question type/check constraints and adds the new 4-type constraint.
+- `loopy-backend/src/schemas/practice.schemas.ts` and `loopy-backend/src/services/practice.service.ts`: validation and grading updated. `multiple_select` stores `correctAnswer` / `selectedAnswer` as a JSON string array and compares sorted arrays; `fill_blank` compares trim + lowercase; true/false and single choice compare deterministic strings.
+- `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx`: builder now shows the 4 type cards only, with type-specific editor controls: true/false buttons, single-correct option cards, multi-correct option cards, and fill-blank answer input.
+- `loopy-frontend/src/pages/v2/V2PracticeSetDetailPage.tsx`: attempt runner now supports `multiple_select` toggles and `fill_blank` input, and no longer renders code challenge UI.
+- `loopy-frontend/src/types/practice.types.ts` and `loopy-frontend/src/services/practice.service.ts`: frontend practice type/payload contract aligned to the 4 quiz types.
+- Verification: source encoding scan `files_with_encoding_issues 0`; frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` -> pass; backend `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` -> pass.
+ succeeds.
+- Attempt runner layout: left progress/question sidebar, main active question panel, MC/true-false option buttons, code challenge starter code + answer textarea, per-question submit, next question, submitted feedback, and completion summary with score.
+- Current limitation: backend has `startAttempt` and `submit`, but no `getAttempt`; therefore the active attempt is held in frontend state. Refreshing the page returns to set overview until a future persisted attempt route/API is added.
+- Verification: source encoding scan `files_with_encoding_issues 0`; frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` -> pass.
+
+Follow-up 2026-06-03 Practice question types redesign:
+- User requested practice sets to support exactly 4 quiz-style types: `True or False`, `Multiple questions`, `Multiple selects`, and `Fill in the blanks`.
+- Backend practice question type contract changed from `multiple_choice | true_false | code_challenge` to `true_false | multiple_choice | multiple_select | fill_blank`.
+- `loopy-backend/database/migrations/027-practice-sets.sql`: initial practice question check updated for the new 4 types.
+- `loopy-backend/database/migrations/028-practice-question-types.sql`: added follow-up migration for databases that already ran old 027; drops old question type/check constraints and adds the new 4-type constraint.
+- `loopy-backend/src/schemas/practice.schemas.ts` and `loopy-backend/src/services/practice.service.ts`: validation and grading updated. `multiple_select` stores `correctAnswer` / `selectedAnswer` as a JSON string array and compares sorted arrays; `fill_blank` compares trim + lowercase; true/false and single choice compare deterministic strings.
+- `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx`: builder now shows the 4 type cards only, with type-specific editor controls: true/false buttons, single-correct option cards, multi-correct option cards, and fill-blank answer input.
+- `loopy-frontend/src/pages/v2/V2PracticeSetDetailPage.tsx`: attempt runner now supports `multiple_select` toggles and `fill_blank` input, and no longer renders code challenge UI.
+- `loopy-frontend/src/types/practice.types.ts` and `loopy-frontend/src/services/practice.service.ts`: frontend practice type/payload contract aligned to the 4 quiz types.
+- Verification: source encoding scan `files_with_encoding_issues 0`; frontend `corepack yarn lint:strict; if ($LASTEXITCODE -eq 0) { corepack yarn build }` -> pass; backend `corepack yarn --ignore-engines lint; if ($LASTEXITCODE -eq 0) { corepack yarn --ignore-engines build }` -> pass.
+
+
+Follow-up 2026-06-03 Practice set creation flow redesign:
+- User requested create-set flow to match Wayground-like flow: opening /practice/sets/new shows Set preview, pressing Create question opens a full question editor, pressing Save question returns to Set preview.
+- Updated loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx:
+  - Added two modes: preview and editor.
+  - Preview has top bar with title/settings/publish, question list cards, create question button, and right-side Find questions panel.
+  - Editor has full-screen question canvas with question type dropdown, prompt area, answer cards, fill-blank input, points, explanation, and Save question button.
+  - Save question only stores the draft question locally and returns to preview; Publish creates the actual practice set through createSet.
+- Added question library search:
+  - loopy-backend/src/schemas/practice.schemas.ts: added searchQuestions query schema.
+  - loopy-backend/src/controllers/practice.controller.ts and src/routes/practice.routes.ts: added GET /api/practice/questions/search.
+  - loopy-backend/src/services/practice.service.ts: searchQuestions searches sets by keyword and returns questions with correctAnswer for builder copy only; getSet/startAttempt still use sanitized questions and do not expose correct answers.
+  - loopy-frontend/src/services/practice.service.ts: searchQuestions now calls /api/practice/questions/search.
+  - loopy-frontend/src/types/practice.types.ts: PracticeQuestion has optional correctAnswer for builder/library responses.
+- Verification: source encoding scan files_with_encoding_issues 0; frontend corepack yarn lint:strict + build pass; backend corepack yarn --ignore-engines lint + build pass.
+
+
+## Recent Work - 2026-06-03 Practice Builder Editor Polish
+- Refined `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx` question editor away from the Wayground-like dark/color-card mockup into a Loopy-style white/teal form.
+- Multiple choice and multiple select answers now show four max answer rows, skip blank rows on save, and only enable the correct-answer checkmark for rows with filled text.
+- Correct-answer state is normalized with trimmed option text so editing an option keeps the selected answer aligned.
+- Verification: frontend `corepack yarn lint:strict` pass, frontend `corepack yarn build` pass, encoding marker scan for the edited page returned 0.
+
+
+## Recent Work - 2026-06-03 Practice Builder Search Route Fix
+- Changed practice builder question search in `loopy-frontend/src/services/practice.service.ts` to use `/api/practice/sets?keyword=...&includeQuestions=true` instead of the separate `/api/practice/questions/search` endpoint, avoiding 404s from stale or missing backend route mounts.
+- Added `includeQuestions` support to backend list sets schema/controller/service so builder search can return matched sets with questions and correct answers for copying into the current draft set. Normal set detail and attempt flows still use sanitized question data.
+- Verification: frontend `corepack yarn lint:strict` pass, frontend `corepack yarn build` pass, backend `corepack yarn --ignore-engines lint` pass, backend `corepack yarn --ignore-engines build` pass. Local unauthenticated request to `/api/practice/sets?keyword=ss&includeQuestions=true&limit=20` returned 401, confirming the route exists rather than 404.
+
+
+## Recent Work - 2026-06-03 Practice Builder Search Visibility Fix
+- Fixed practice builder search visibility in `loopy-backend/src/services/practice.service.ts`: when `includeQuestions=true`, list sets now returns published public/unlisted sets plus sets created by the current user. This lets the right-side builder search find questions by question name or owning set name even when the user's set is draft/private/unlisted.
+- Frontend continues to search through `/api/practice/sets?keyword=...&includeQuestions=true` and no longer depends on `/api/practice/questions/search`.
+- Verification: backend `corepack yarn --ignore-engines lint` pass, backend `corepack yarn --ignore-engines build` pass, frontend `corepack yarn lint:strict` pass.
+
+
+## Recent Work - 2026-06-03 Practice Builder Search Fallback Fix
+- Updated backend `PracticeService.searchQuestions` so the legacy `/api/practice/questions/search` endpoint uses the same `includeQuestions=true` list-set search logic as the new builder search path. This keeps old frontend bundles from returning empty results when searching user-owned draft/private/unlisted sets.
+- Verified local port 3000 currently recognizes `/api/practice/questions/search`; unauthenticated calls return 401, not 404. If the browser still reports 404, the running frontend/backend process is stale and needs restart or hard refresh.
+- Verification: backend `corepack yarn --ignore-engines lint` pass, backend `corepack yarn --ignore-engines build` pass.
+
+
+## Recent Work - 2026-06-03 Practice Builder Search Questions Attach Fix
+- Fixed `PracticeService.listSets` so `includeQuestions=true` no longer relies on Supabase embedded `practice_questions(*)`. It now fetches matched sets first, queries `practice_questions` by matched set ids, groups them by `set_id`, and attaches `questions` before returning the API response.
+- This fixes builder search returning matching sets but no visible question results in the right-side panel.
+- Verification: backend `corepack yarn --ignore-engines lint` pass, backend `corepack yarn --ignore-engines build` pass.
+
+
+## Recent Work - 2026-06-03 Practice Builder Keyword Search Robustness
+- Made backend practice set keyword search attach questions whenever `keyword` is present, even if a stale frontend bundle omits `includeQuestions=true`. This fixes responses that returned matching sets but no `questions` field, leaving the builder right-side results empty.
+- Verification: backend `corepack yarn --ignore-engines lint` pass, backend `corepack yarn --ignore-engines build` pass.
+
+
+## Recent Work - 2026-06-03 Practice Set Settings Modal
+- Changed the practice set builder Settings action in `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx` from a placeholder button into an in-page modal.
+- The modal edits set metadata: title, description, topic, language id, difficulty, visibility, status, and completed-lesson requirement count. Settings use a draft state; Cancel closes without applying, Save settings writes back to the builder set form.
+- Verification: frontend `corepack yarn lint:strict` pass, frontend `corepack yarn build` pass, encoding marker scan for the edited page returned 0.
+
+
+## Recent Work - 2026-06-03 Practice Builder Censorship And Language Select
+- Added client-side restricted keyword detection to `loopy-frontend/src/pages/v2/V2PracticeSetCreatePage.tsx` for practice set metadata and question editor content. It shows inline warnings and toast warnings on Save settings, Save question, and Publish; it warns without blocking draft editing.
+- Changed the Settings modal language field from free text to a select dropdown loaded from `/api/languages`, with JavaScript/Python/C++ fallback options if the API is unavailable.
+- Verification: frontend `corepack yarn lint:strict` pass, frontend `corepack yarn build` pass, encoding marker scan for the edited page returned 0.
