@@ -192,7 +192,7 @@ const MatchResults: React.FC<MatchResultsProps> = ({ match, finalScores, current
           className="flex gap-4 justify-center"
         >
           <button
-            onClick={() => navigate('/pvp')}
+            onClick={() => navigate('/practice/compete')}
             className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-brand-teal to-brand-cyan text-[#0a0e1a] font-bold rounded-xl hover:shadow-lg hover:shadow-brand-teal/30 transition-all"
           >
             <RotateCcw className="w-5 h-5" />

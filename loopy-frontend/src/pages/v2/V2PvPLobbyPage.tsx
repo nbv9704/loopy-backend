@@ -28,7 +28,7 @@ const V2PvPLobbyPage: React.FC = () => {
     // Header content
     'nav.learn',
     'nav.playground',
-    'nav.pvp',
+    'nav.practice',
     'nav.docs',
     'nav.settings',
     'nav.logout',
@@ -100,7 +100,7 @@ const V2PvPLobbyPage: React.FC = () => {
   const headerContent = {
     'nav.learn': content['nav.learn'],
     'nav.playground': content['nav.playground'],
-    'nav.pvp': content['nav.pvp'],
+    'nav.practice': content['nav.practice'],
     'nav.docs': content['nav.docs'],
     'nav.settings': content['nav.settings'],
     'nav.logout': content['nav.logout'],
@@ -173,7 +173,7 @@ const V2PvPLobbyPage: React.FC = () => {
     try {
       const match = await pvpService.joinMatch(roomCodeInput.trim().toUpperCase())
       toast.success(t('pvp.joining'))
-      navigate(`/pvp/match/${match.room_code}`)
+      navigate(`/practice/compete/match/${match.room_code}`)
     } catch (error: any) {
       toast.error(t('pvp.invalidRoomCode'))
     } finally {
@@ -209,7 +209,7 @@ const V2PvPLobbyPage: React.FC = () => {
       })
 
       toast.success(t('pvp.matchFound'))
-      navigate(`/pvp/match/${match.room_code}`)
+      navigate(`/practice/compete/match/${match.room_code}`)
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.error?.message ||
@@ -237,7 +237,7 @@ const V2PvPLobbyPage: React.FC = () => {
             />
           </div>
 
-          <main className="flex-grow pt-32 pb-16 relative z-10">
+          <main className="flex-grow pb-16 pt-12 relative z-10">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             {user && !canPlay && (
               <motion.div

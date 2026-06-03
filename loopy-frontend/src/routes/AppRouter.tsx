@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import LandingPage from '../pages/LandingPage'
 import ProtectedRoute from '../components/admin/ProtectedRoute'
 import UserProtectedRoute from '../components/UserProtectedRoute'
@@ -27,6 +27,10 @@ const V2DocsPage = lazy(() => import('../pages/v2/V2DocsPage'))
 const V2ProfilePage = lazy(() => import('../pages/v2/V2ProfilePage'))
 const V2OnboardingPage = lazy(() => import('../pages/v2/V2OnboardingPage'))
 const V2AuthPage = lazy(() => import('../pages/v2/V2AuthPage'))
+const V2PracticePage = lazy(() => import('../pages/v2/V2PracticePage'))
+const V2PracticeSetsPage = lazy(() => import('../pages/v2/V2PracticeSetsPage'))
+const V2PracticeSetCreatePage = lazy(() => import('../pages/v2/V2PracticeSetCreatePage'))
+const V2PracticeSetDetailPage = lazy(() => import('../pages/v2/V2PracticeSetDetailPage'))
 const V2PvPLobbyPage = lazy(() => import('../pages/v2/V2PvPLobbyPage'))
 const V2PvPMatchPage = lazy(() => import('../pages/v2/V2PvPMatchPage'))
 const V2LearnPage = lazy(() => import('../pages/v2/V2LearnPage'))
@@ -108,8 +112,16 @@ const AppRouter: React.FC = () => {
           }
         />
 
-        {/* PvP routes */}
-        <Route path="/pvp" element={<Suspense fallback={<LoadingScreen />}><V2PvPLobbyPage /></Suspense>} />
+        {/* Practice routes */}
+        <Route path="/practice" element={<Suspense fallback={<LoadingScreen />}><V2PracticePage /></Suspense>} />
+        <Route path="/practice/sets" element={<Suspense fallback={<LoadingScreen />}><V2PracticeSetsPage /></Suspense>} />
+        <Route path="/practice/sets/new" element={<Suspense fallback={<LoadingScreen />}><V2PracticeSetCreatePage /></Suspense>} />
+        <Route path="/practice/sets/:setId" element={<Suspense fallback={<LoadingScreen />}><V2PracticeSetDetailPage /></Suspense>} />
+        <Route path="/practice/compete" element={<Suspense fallback={<LoadingScreen />}><V2PvPLobbyPage /></Suspense>} />
+        <Route path="/practice/compete/match/:roomCode" element={<Suspense fallback={<LoadingScreen />}><V2PvPMatchPage /></Suspense>} />
+
+        {/* Legacy PvP routes */}
+        <Route path="/pvp" element={<Navigate to="/practice/compete" replace />} />
         <Route path="/pvp/match/:roomCode" element={<Suspense fallback={<LoadingScreen />}><V2PvPMatchPage /></Suspense>} />
 
         {/* Admin login route (not protected) */}

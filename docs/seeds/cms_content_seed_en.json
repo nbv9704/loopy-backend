@@ -20,7 +20,8 @@
       "footer.description": "Loopy helps beginners learn programming through small guided steps: observe, edit, run, check, and debug real code.",
       "footer.allRightsReserved": "All rights reserved.",
       "footer.privacy": "Privacy",
-      "footer.terms": "Terms"
+      "footer.terms": "Terms",
+      "nav.practice": "Practice"
     },
     "landing": {
       "hero.title": "Learn to code in small steps, not by being dropped into an IDE alone.",
@@ -353,6 +354,28 @@
       "pvp.header.title": "PvP Coding Room",
       "pvp.match.notfound.title": "Match not found",
       "pvp.match.notfound.desc": "The room code may be wrong or the match may have ended. Check the code or create a new match."
+    },
+    "practice": {
+      "practice.title": "Practice after learning.",
+      "practice.subtitle": "Choose how to review: compete in realtime for speed, or work through practice sets to reinforce each topic.",
+      "practice.compete.title": "Compete",
+      "practice.compete.desc": "Join a realtime 1v1 room and practice reactions with short questions after learning.",
+      "practice.compete.cta": "Enter compete mode",
+      "practice.sets.title": "Practice sets",
+      "practice.sets.desc": "Work through prepared question sets or create your own set with up to 30 questions.",
+      "practice.sets.cta": "Browse sets",
+      "practice.sets.badge": "Practice sets",
+      "practice.official.title": "Official sets",
+      "practice.official.desc": "The team can publish sets by language, difficulty, and topic.",
+      "practice.user.title": "Personal sets",
+      "practice.user.desc": "Learners can create private practice sets with a title, topic, unlock requirement, and up to 30 questions.",
+      "practice.sets.page.title": "Practice sets",
+      "practice.sets.page.subtitle": "Browse official sets or public learner-created sets to review by topic.",
+      "practice.sets.empty.title": "No public practice sets yet",
+      "practice.sets.empty.desc": "The backend is ready for practice sets. Public sets will appear here after the team or learners publish them.",
+      "practice.sets.create": "Create set",
+      "practice.sets.start": "Start",
+      "practice.sets.locked": "Locked"
     }
   }
 }

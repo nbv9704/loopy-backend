@@ -42,10 +42,10 @@ export const setAuthTokenCookie = (res: Response, token: string): void => {
 
 /**
  * Set refresh token cookie
- * Long-lived: 7 days
+ * Long-lived: 30 days
  */
 export const setRefreshTokenCookie = (res: Response, refreshToken: string): void => {
-  const options = getSecureCookieOptions(7 * 24 * 60 * 60 * 1000) // 7 days
+  const options = getSecureCookieOptions(30 * 24 * 60 * 60 * 1000) // 30 days
   res.cookie('refresh_token', refreshToken, options)
 }
 

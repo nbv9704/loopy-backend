@@ -509,8 +509,12 @@ export class AdminContentService {
         },
       })
 
-      // Trigger i18n sync after successful update
-      await this.triggerI18nSync()
+      // Sync i18n in the background so admin save returns as soon as DB update succeeds.
+      this.triggerI18nSync().catch((syncError) => {
+        logger.warn('Background i18n sync failed after content update', {
+          error: syncError instanceof Error ? syncError.message : syncError,
+        })
+      })
 
       // Transform data from snake_case to camelCase
       return {
@@ -686,16 +690,32 @@ export class AdminContentService {
 
       // Iterate through categories and items
       for (const [categoryName, items] of Object.entries(data.categories)) {
-        // Find category by name
-        const { data: category, error: categoryError } = await supabaseAdmin
+        // Find category by name; create it during import if the seed defines a new group.
+        const { data: existingCategory, error: categoryError } = await supabaseAdmin
           .from('content_categories')
           .select('id')
           .eq('name', categoryName)
           .single()
 
+        let category = existingCategory
+
         if (categoryError || !category) {
-          errors.push(`Category "${categoryName}" not found`)
-          continue
+          const { data: createdCategory, error: createCategoryError } = await supabaseAdmin
+            .from('content_categories')
+            .insert({
+              name: categoryName,
+              description: `Imported ${categoryName} content`,
+              display_order: 999,
+            })
+            .select('id')
+            .single()
+
+          if (createCategoryError || !createdCategory) {
+            errors.push(`Failed to create category "${categoryName}": ${createCategoryError?.message || 'Unknown error'}`)
+            continue
+          }
+
+          category = createdCategory
         }
 
         // Import each item

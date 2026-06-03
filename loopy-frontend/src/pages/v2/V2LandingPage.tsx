@@ -66,7 +66,7 @@ const V2LandingPage: React.FC = () => {
     // Header content
     'nav.learn',
     'nav.playground',
-    'nav.pvp',
+    'nav.practice',
     'nav.docs',
     'nav.settings',
     'nav.logout',
@@ -137,7 +137,7 @@ const V2LandingPage: React.FC = () => {
   const headerContent = {
     'nav.learn': content['nav.learn'],
     'nav.playground': content['nav.playground'],
-    'nav.pvp': content['nav.pvp'],
+    'nav.practice': content['nav.practice'],
     'nav.docs': content['nav.docs'],
     'nav.settings': content['nav.settings'],
     'nav.logout': content['nav.logout'],

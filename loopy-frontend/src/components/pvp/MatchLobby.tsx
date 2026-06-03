@@ -31,7 +31,7 @@ const MatchLobby: React.FC<MatchLobbyProps> = ({ match, onReady, currentUserId }
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
       {/* Back button */}
       <button
-        onClick={() => navigate('/pvp')}
+        onClick={() => navigate('/practice/compete')}
         className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all"
       >
         <ArrowLeft className="w-5 h-5" />

@@ -88,6 +88,16 @@ export function setCachedContent(cacheKey: string, data: ContentItem[]): void {
   }
 }
 
+export function clearContentCache(): void {
+  try {
+    Object.keys(localStorage)
+      .filter(key => key.startsWith(CACHE_KEY_PREFIX))
+      .forEach(key => localStorage.removeItem(key))
+  } catch (error) {
+    console.error('Error clearing content cache:', error)
+  }
+}
+
 /**
  * useContent Hook
  *

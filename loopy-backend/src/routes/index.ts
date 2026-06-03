@@ -11,6 +11,7 @@ import adminRoutes from './admin.routes'
 import adminApiRoutes from './admin-api.routes'
 import gradingRoutes from './grading.routes'
 import pvpRoutes from './pvp.routes'
+import practiceRoutes from './practice.routes'
 import pathRoutes from './path.routes'
 import publicRoutes from './public.routes'
 import { healthCheck } from '../controllers/health.controller'
@@ -45,6 +46,9 @@ router.use('/grading', gradingRoutes)
 
 // PvP system routes
 router.use('/pvp', pvpRoutes)
+
+// Practice system routes
+router.use('/practice', practiceRoutes)
 
 // Admin API routes (session-based for React SPA) - MUST be before /admin
 router.use('/admin-auth', adminApiRoutes)

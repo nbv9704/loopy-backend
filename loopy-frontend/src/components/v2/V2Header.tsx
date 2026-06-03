@@ -10,7 +10,7 @@ import headerLogo from '../../assets/images/logos/header/logo-w256.png'
 const NAV_ITEMS = [
   { id: 'learn', labelKey: 'nav.learn', path: '/languages' },
   { id: 'playground', labelKey: 'nav.playground', path: '/playground' },
-  { id: 'pvp', labelKey: 'nav.pvp', path: '/pvp' },
+  { id: 'practice', labelKey: 'nav.practice', path: '/practice' },
   { id: 'docs', labelKey: 'nav.docs', path: '/docs' },
 ]
 
@@ -60,6 +60,9 @@ const V2Header: React.FC<V2HeaderProps> = ({ headerContent = {} }) => {
     if (path === '/languages') {
       return location.pathname === '/languages' || location.pathname.startsWith('/learn') || location.pathname.startsWith('/library') || location.pathname.startsWith('/onboarding')
     }
+    if (path === '/practice') {
+      return location.pathname.startsWith('/practice') || location.pathname.startsWith('/pvp')
+    }
     return location.pathname === path || location.pathname.startsWith(path + '/')
   }
 
@@ -74,7 +77,7 @@ const V2Header: React.FC<V2HeaderProps> = ({ headerContent = {} }) => {
     return headerContent[labelKey] || t(labelKey)
   }
 
-  const visibleNavItems = NAV_ITEMS.filter(item => !(item.id === 'pvp' && !user))
+  const visibleNavItems = NAV_ITEMS.filter(item => !(item.id === 'practice' && !user))
 
   return (
     <header className="sticky top-0 left-0 right-0 bg-[#f7fbff]/90 backdrop-blur-xl border-b border-slate-200/80 z-50">

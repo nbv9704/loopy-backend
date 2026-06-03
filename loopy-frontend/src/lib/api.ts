@@ -23,6 +23,7 @@ interface ApiResponse<T> {
 
 interface ApiRequestOptions extends RequestInit {
   suppressAuthToast?: boolean
+  skipAuthRefresh?: boolean
 }
 
 export interface ExecutionResult {
@@ -58,12 +59,14 @@ export interface CapabilitiesResult {
 
 class ApiClient {
   private baseUrl: string
+  private refreshPromise: Promise<boolean> | null = null
+
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
   }
 
   public async request<T>(endpoint: string, options: ApiRequestOptions = {}): Promise<ApiResponse<T>> {
-    const { suppressAuthToast, ...fetchOptions } = options
+    const { suppressAuthToast, skipAuthRefresh, ...fetchOptions } = options
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(fetchOptions.headers as Record<string, string>),
@@ -76,9 +79,26 @@ class ApiClient {
         credentials: 'include', // CRITICAL: Send cookies with every request
       })
 
+      if (response.status === 401 && !skipAuthRefresh && this.shouldAttemptAuthRefresh(endpoint)) {
+        const refreshed = await this.refreshSessionForRetry()
+        if (refreshed) {
+          const retryResponse = await fetch(`${this.baseUrl}${endpoint}`, {
+            ...fetchOptions,
+            headers,
+            credentials: 'include',
+          })
+
+          if (!retryResponse.ok) {
+            await this.handleHttpError(retryResponse, endpoint, Boolean(suppressAuthToast), fetchOptions.method)
+          }
+
+          return await retryResponse.json()
+        }
+      }
+
       // Handle HTTP errors with interceptor logic
       if (!response.ok) {
-        await this.handleHttpError(response, endpoint, Boolean(suppressAuthToast))
+        await this.handleHttpError(response, endpoint, Boolean(suppressAuthToast), fetchOptions.method)
       }
 
       const data = await response.json()
@@ -104,7 +124,8 @@ class ApiClient {
   private async handleHttpError(
     response: Response,
     endpoint: string,
-    suppressAuthToast: boolean
+    suppressAuthToast: boolean,
+    method?: string
   ): Promise<void> {
     const status = response.status
     const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
@@ -114,7 +135,7 @@ class ApiClient {
       case 401:
         // Unauthorized - only show error message, don't redirect
         // Let individual components handle auth requirements
-        if (!suppressAuthToast && !isAdminRoute && !isAuthBootstrap) {
+        if (!suppressAuthToast && !isAdminRoute && !isAuthBootstrap && this.shouldShowAuthToast(method)) {
           toast.error('Phiên đăng nhập đã hết hạn', { id: 'session-expired-toast' })
         }
         break
@@ -140,6 +161,37 @@ class ApiClient {
     // Throw error to maintain existing error handling flow
     const errorData = await response.json().catch(() => ({}))
     throw new Error(errorData.message || `HTTP ${status} error`)
+  }
+
+  private shouldAttemptAuthRefresh(endpoint: string): boolean {
+    return ![
+      '/api/auth/login',
+      '/api/auth/signup',
+      '/api/auth/logout',
+      '/api/auth/refresh',
+    ].includes(endpoint)
+  }
+
+  private shouldShowAuthToast(method?: string): boolean {
+    return (method || 'GET').toUpperCase() !== 'GET'
+  }
+
+  private async refreshSessionForRetry(): Promise<boolean> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = fetch(`${this.baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      })
+        .then(response => response.ok)
+        .catch(() => false)
+        .finally(() => {
+          this.refreshPromise = null
+        })
+    }
+
+    return this.refreshPromise
   }
 
   // Authentication
@@ -174,6 +226,7 @@ class ApiClient {
       method: 'POST',
       body: refreshToken ? JSON.stringify({ refreshToken }) : JSON.stringify({}),
       suppressAuthToast: true,
+      skipAuthRefresh: true,
     })
   }
 

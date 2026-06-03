@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { contentService } from '../../services/admin/content.service'
 import ContentEditorModal from '../../components/admin/ContentEditorModal'
+import { clearContentCache } from '../../hooks/useContent'
 
 interface ContentCategory {
   id: string
@@ -198,6 +199,7 @@ const ContentManagerPage: React.FC = () => {
 
     try {
       await contentService.deleteContentItem(item.id)
+      clearContentCache()
       setContentItems(current => current.filter(i => i.id !== item.id))
       setTotalItems(current => current - 1)
     } catch (err) {
@@ -212,10 +214,17 @@ const ContentManagerPage: React.FC = () => {
     try {
       if (editingItem) {
         // Update existing item
-        await contentService.updateContentItem(editingItem.id, itemData)
+        const updatedItem = await contentService.updateContentItem(editingItem.id, itemData)
+        clearContentCache()
+        setContentItems(current => current.map(item => (item.id === updatedItem.id ? updatedItem : item)))
       } else {
         // Create new item
-        await contentService.createContentItem(itemData)
+        const createdItem = await contentService.createContentItem(itemData)
+        clearContentCache()
+        if (createdItem.categoryId === selectedCategory && createdItem.language === selectedLanguage) {
+          setContentItems(current => [createdItem, ...current].slice(0, ITEMS_PER_PAGE))
+          setTotalItems(current => current + 1)
+        }
       }
 
       setIsEditorOpen(false)
@@ -258,6 +267,7 @@ const ContentManagerPage: React.FC = () => {
 
     try {
       const result = await contentService.importContent(file)
+      clearContentCache()
       setReloadKey(current => current + 1)
 
       if (result.errors.length > 0) {

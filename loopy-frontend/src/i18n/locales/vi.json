@@ -7,7 +7,8 @@
     "pvp": "Thử thách",
     "docs": "Tài liệu",
     "settings": "Cài đặt",
-    "admin": "Quản trị"
+    "admin": "Quản trị",
+    "practice": "Luyện tập"
   },
   "hero": {
     "titlePrefix": "Học lập trình",
@@ -570,7 +571,7 @@
     },
     "faq": {
       "title": "LANDING.FAQ.TITLE VI",
-      "badge": "LANDING.FAQ.BADGE VI"
+      "badge": "FAQ"
     },
     "journey": {
       "desc": "LANDING.JOURNEY.DESC VI",
@@ -844,11 +845,52 @@
     "journey": {
       "lessons_done": "bài đã hoàn thành",
       "title": "Bạn đang xây thói quen học code từng bước.",
-      "badge": "Journey progress"
+      "badge": "Journey progress",
+      "tab": {
+        "card3": "Mở Journey Map",
+        "card2": "Trang library tách bài đã xong, bài hiện tại, bài kế tiếp và bài bị khóa để bạn không phải đoán.",
+        "card1": "Tiếp tục từ Journey Map",
+        "desc": "Tóm tắt này dùng progress đã lưu và dữ liệu tài khoản. Mở Journey Map để xem chính xác bài tiếp theo.",
+        "title": "Hành trình đã lưu"
+      }
     },
     "badge": "Profile",
     "subtitle": "Xem tiến độ, streak, điểm và bài nên học tiếp theo trong hành trình Loopy.",
-    "title": "Hồ sơ học tập của bạn."
+    "title": "Hồ sơ học tập của bạn.",
+    "settings": {
+      "language": "Ngôn ngữ ưu tiên",
+      "onboarding": "Onboarding",
+      "account": "Tài khoản",
+      "tab": {
+        "desc": "Chỉ hiển thị các thao tác tóm tắt an toàn. Hành động xóa/nhạy cảm cần backend hỗ trợ trước.",
+        "title": "Cài đặt tài khoản"
+      }
+    },
+    "notifications": {
+      "item3": "Hiển thị hướng dẫn trước khi vào PvP quá sớm.",
+      "item2": "Hiển thị ghi chú khi progress đã lưu thành công.",
+      "item1": "Hiển thị nhắc nhở khi bài tiếp theo đã sẵn sàng.",
+      "tab": {
+        "desc": "Các nhắc nhở này hiển thị trong Loopy. Email và push notification chưa bật cho đến khi backend hỗ trợ.",
+        "title": "Thông báo trong app"
+      }
+    },
+    "goals": {
+      "update_btn": "Cập nhật lộ trình",
+      "preferred_language": "Ngôn ngữ ưu tiên",
+      "current_goal": "Mục tiêu hiện tại",
+      "tab": {
+        "desc": "Giữ mục tiêu đủ nhỏ để làm được ngay hôm nay. Bạn có thể đổi lộ trình mà không mất progress đã lưu.",
+        "title": "Mục tiêu học tập"
+      }
+    },
+    "tab": {
+      "settings": "Cài đặt",
+      "notifications": "Thông báo",
+      "goals": "Mục tiêu",
+      "journey": "Hành trình",
+      "overview": "Tổng quan"
+    }
   },
   "library": {
     "cta": {
@@ -870,5 +912,39 @@
       "title": "Done"
     },
     "empty": "Chưa có bài published trong lộ trình này."
+  },
+  "practice": {
+    "title": "Luyện tập sau khi học.",
+    "subtitle": "Chọn cách ôn phù hợp: thi đấu realtime để luyện phản xạ, hoặc làm bộ bài tập để củng cố từng chủ đề.",
+    "compete": {
+      "title": "Thi đấu",
+      "desc": "Vào phòng 1v1 realtime để luyện phản xạ với câu hỏi ngắn sau khi học.",
+      "cta": "Vào phòng thi đấu"
+    },
+    "sets": {
+      "title": "Bộ bài tập",
+      "desc": "Làm bộ câu hỏi có sẵn hoặc tự tạo bộ luyện tập tối đa 30 câu.",
+      "cta": "Duyệt bộ bài tập",
+      "badge": "Practice sets",
+      "create": "Tạo bộ",
+      "start": "Bắt đầu",
+      "locked": "Chưa mở khóa",
+      "page": {
+        "title": "Bộ bài tập",
+        "subtitle": "Duyệt bộ bài tập chính thức hoặc bộ công khai do người học tạo để ôn theo chủ đề."
+      },
+      "empty": {
+        "title": "Chưa có bộ bài tập công khai",
+        "desc": "Backend đã sẵn sàng cho bộ bài tập. Khi team hoặc người dùng publish bộ public, danh sách sẽ hiển thị tại đây."
+      }
+    },
+    "official": {
+      "title": "Bộ chính thức",
+      "desc": "Đội phát triển có thể phát hành bộ bài theo ngôn ngữ, cấp độ và chủ đề."
+    },
+    "user": {
+      "title": "Bộ cá nhân",
+      "desc": "Người dùng tạo bộ luyện tập riêng, đặt tên, chủ đề, yêu cầu mở khóa và tối đa 30 câu."
+    }
   }
 }

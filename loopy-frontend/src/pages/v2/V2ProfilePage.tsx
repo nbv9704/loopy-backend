@@ -37,7 +37,7 @@ const V2ProfilePage: React.FC = () => {
   })
 
   const contentKeys = [
-    'nav.learn', 'nav.playground', 'nav.pvp', 'nav.docs', 'nav.settings', 'nav.logout',
+    'nav.learn', 'nav.playground', 'nav.practice', 'nav.docs', 'nav.settings', 'nav.logout',
     'profile.title', 'profile.subtitle', 'profile.badge',
     'profile.tab.overview', 'profile.tab.journey', 'profile.tab.goals', 'profile.tab.notifications', 'profile.tab.settings',
     'profile.journey.badge', 'profile.journey.title', 'profile.journey.lessons_done',
@@ -93,7 +93,7 @@ const V2ProfilePage: React.FC = () => {
   const headerContent = {
     'nav.learn': content['nav.learn'],
     'nav.playground': content['nav.playground'],
-    'nav.pvp': content['nav.pvp'],
+    'nav.practice': content['nav.practice'],
     'nav.docs': content['nav.docs'],
     'nav.settings': content['nav.settings'],
     'nav.logout': content['nav.logout'],

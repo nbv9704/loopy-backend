@@ -10,7 +10,7 @@ import headerLogo from '../../assets/images/logos/header/logo-w256.png'
 const NAV_ITEMS = [
   { id: 'learn', labelKey: 'nav.learn', path: '/languages' },
   { id: 'playground', labelKey: 'nav.playground', path: '/playground' },
-  { id: 'pvp', labelKey: 'nav.pvp', path: '/pvp' },
+  { id: 'practice', labelKey: 'nav.practice', path: '/practice' },
   { id: 'docs', labelKey: 'nav.docs', path: '/docs' },
 ]
 
@@ -64,7 +64,7 @@ const Header: React.FC = () => {
     return item.path
   }
 
-  const visibleNavItems = NAV_ITEMS.filter(item => !(item.id === 'pvp' && !user))
+  const visibleNavItems = NAV_ITEMS.filter(item => !(item.id === 'practice' && !user))
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-[#0a0e1a]/90 backdrop-blur-xl border-b border-white/10 z-50">

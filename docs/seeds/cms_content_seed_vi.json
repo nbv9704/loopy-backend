@@ -20,7 +20,8 @@
       "footer.description": "Loopy giúp người mới học lập trình theo từng bước nhỏ: quan sát, thay đổi, chạy thử, kiểm tra và sửa lỗi thật.",
       "footer.allRightsReserved": "Đã đăng ký bản quyền.",
       "footer.privacy": "Quyền riêng tư",
-      "footer.terms": "Điều khoản"
+      "footer.terms": "Điều khoản",
+      "nav.practice": "Luyện tập"
     },
     "landing": {
       "hero.title": "Học code bằng từng bước nhỏ, không bị ném vào IDE một mình.",
@@ -353,6 +354,28 @@
       "pvp.header.title": "PvP Coding Room",
       "pvp.match.notfound.title": "Không tìm thấy trận đấu",
       "pvp.match.notfound.desc": "Mã phòng có thể sai hoặc trận đã kết thúc. Hãy kiểm tra lại mã hoặc tạo trận mới."
+    },
+    "practice": {
+      "practice.title": "Luyện tập sau khi học.",
+      "practice.subtitle": "Chọn cách ôn phù hợp: thi đấu realtime để luyện phản xạ, hoặc làm bộ bài tập để củng cố từng chủ đề.",
+      "practice.compete.title": "Thi đấu",
+      "practice.compete.desc": "Vào phòng 1v1 realtime để luyện phản xạ với câu hỏi ngắn sau khi học.",
+      "practice.compete.cta": "Vào phòng thi đấu",
+      "practice.sets.title": "Bộ bài tập",
+      "practice.sets.desc": "Làm bộ câu hỏi có sẵn hoặc tự tạo bộ luyện tập tối đa 30 câu.",
+      "practice.sets.cta": "Duyệt bộ bài tập",
+      "practice.sets.badge": "Practice sets",
+      "practice.official.title": "Bộ chính thức",
+      "practice.official.desc": "Đội phát triển có thể phát hành bộ bài theo ngôn ngữ, cấp độ và chủ đề.",
+      "practice.user.title": "Bộ cá nhân",
+      "practice.user.desc": "Người dùng tạo bộ luyện tập riêng, đặt tên, chủ đề, yêu cầu mở khóa và tối đa 30 câu.",
+      "practice.sets.page.title": "Bộ bài tập",
+      "practice.sets.page.subtitle": "Duyệt bộ bài tập chính thức hoặc bộ công khai do người học tạo để ôn theo chủ đề.",
+      "practice.sets.empty.title": "Chưa có bộ bài tập công khai",
+      "practice.sets.empty.desc": "Backend đã sẵn sàng cho bộ bài tập. Khi team hoặc người dùng publish bộ public, danh sách sẽ hiển thị tại đây.",
+      "practice.sets.create": "Tạo bộ",
+      "practice.sets.start": "Bắt đầu",
+      "practice.sets.locked": "Chưa mở khóa"
     }
   }
 }

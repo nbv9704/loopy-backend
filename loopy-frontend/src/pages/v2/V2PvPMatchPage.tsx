@@ -93,7 +93,7 @@ const V2PvPMatchPage: React.FC = () => {
 
         // Navigate away after showing error
         setTimeout(() => {
-          navigate('/pvp')
+          navigate('/practice/compete')
         }, 2000)
       }
     }
@@ -311,7 +311,7 @@ const V2PvPMatchPage: React.FC = () => {
         <p className="text-slate-900 text-2xl font-black">{pvpNotFoundTitle}</p>
         <p className="text-slate-600 text-sm max-w-md text-center">{pvpNotFoundDesc}</p>
         <button
-          onClick={() => navigate('/pvp')}
+          onClick={() => navigate('/practice/compete')}
           className="px-4 py-2 bg-brand-teal text-white rounded-lg hover:bg-brand-cyan transition-colors"
         >
           {t('pvp.match.backToLobby')}

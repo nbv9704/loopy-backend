@@ -512,6 +512,7 @@ describe('AdminContentService', () => {
     })
 
     it('should handle import errors gracefully', async () => {
+      // Test importing with a non-existent category - service should auto-create it
       const result = await AdminContentService.importContent(
         {
           version: '1.0',
@@ -525,8 +526,19 @@ describe('AdminContentService', () => {
         testAdminId
       )
 
-      expect(result.errors.length).toBeGreaterThan(0)
-      expect(result.errors[0]).toContain('not found')
+      // Service auto-creates missing categories, so this should succeed
+      expect(result.imported).toBeGreaterThan(0)
+      expect(result.errors.length).toBe(0)
+
+      // Verify category was created
+      const { data: category } = await supabaseAdmin
+        .from('content_categories')
+        .select('*')
+        .eq('name', 'nonexistent')
+        .single()
+
+      expect(category).toBeDefined()
+      expect(category?.name).toBe('nonexistent')
     })
 
     it('should update existing items on import', async () => {
