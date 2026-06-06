@@ -11,11 +11,27 @@ if (config.redis.url) {
   redisClient = createClient({
     url: config.redis.url,
     socket: config.redis.url.startsWith('rediss://') 
-      ? { connectTimeout: 30000, tls: true, rejectUnauthorized: process.env.REDIS_REJECT_UNAUTHORIZED !== 'false' }
-      : { connectTimeout: 30000 }
+      ? {
+          connectTimeout: 30000,
+          tls: true,
+          rejectUnauthorized: process.env.REDIS_REJECT_UNAUTHORIZED !== 'false',
+          reconnectStrategy: retries => Math.min(retries * 100, 3000),
+        }
+      : {
+          connectTimeout: 30000,
+          reconnectStrategy: retries => Math.min(retries * 100, 3000),
+        }
+  })
+
+  redisClient.on('error', (err: any) => {
+    console.error('Session Redis Client Error:', err)
+  })
+
+  redisClient.on('reconnecting', () => {
+    console.warn('Session Redis Client reconnecting...')
   })
   
-  // Connect and handle errors but do not block startup
+  // Connect and handle startup errors but do not block startup
   redisClient.connect().catch((err: any) => {
     console.error('Session Redis Client Connection Error:', err)
   })
