@@ -88,7 +88,7 @@ export class PracticeService {
   }
 
   async listSets(params: {
-    userId: string
+    userId?: string
     languageId?: string
     difficulty?: 'easy' | 'medium' | 'hard'
     topic?: string
@@ -108,11 +108,16 @@ export class PracticeService {
       .select('*, practice_questions(count)', { count: 'exact' })
 
     if (params.mine) {
+      if (!params.userId) {
+        return { items: [], total: 0, limit, offset }
+      }
       query = query.eq('created_by', params.userId)
     } else if (params.official) {
       query = query.eq('visibility', 'official').eq('status', 'published')
-    } else if (includeQuestions) {
+    } else if (includeQuestions && params.userId) {
       query = query.or(`and(status.eq.published,visibility.in.(public,unlisted)),created_by.eq.${params.userId}`)
+    } else if (includeQuestions) {
+      query = query.eq('status', 'published').in('visibility', ['public', 'unlisted'])
     } else {
       query = query.eq('status', 'published').in('visibility', ['public'])
     }
@@ -173,7 +178,7 @@ export class PracticeService {
     }
   }
 
-  async getSet(setId: string, userId: string) {
+  async getSet(setId: string, userId?: string) {
     const { data: set, error } = await supabaseAdmin
       .from('practice_sets')
       .select('*, practice_questions(*)')
@@ -499,8 +504,8 @@ export class PracticeService {
     return set
   }
 
-  private canViewSet(set: any, userId: string) {
-    return set.created_by === userId || (set.status === 'published' && ['public', 'unlisted'].includes(set.visibility))
+  private canViewSet(set: any, userId?: string) {
+    return (Boolean(userId) && set.created_by === userId) || (set.status === 'published' && ['public', 'unlisted', 'official'].includes(set.visibility))
   }
 
   private validateQuestions(questions: PracticeQuestionInput[]) {
@@ -598,6 +603,230 @@ export class PracticeService {
       maxScore: row.max_score,
       startedAt: row.started_at,
       completedAt: row.completed_at,
+    }
+  }
+
+  /**
+   * Admin: List all practice sets with filters (ignores visibility/status restrictions)
+   */
+  async listAllSets(params: {
+    languageId?: string
+    difficulty?: 'easy' | 'medium' | 'hard'
+    status?: 'draft' | 'published'
+    visibility?: 'public' | 'private' | 'unlisted' | 'official'
+    createdBy?: string
+    limit?: number
+    offset?: number
+  }) {
+    const limit = params.limit ?? 20
+    const offset = params.offset ?? 0
+
+    let query = supabaseAdmin
+      .from('practice_sets')
+      .select('*, practice_questions(count)', { count: 'exact' })
+
+    if (params.status) query = query.eq('status', params.status)
+    if (params.visibility) query = query.eq('visibility', params.visibility)
+    if (params.languageId) query = query.eq('language_id', params.languageId)
+    if (params.difficulty) query = query.eq('difficulty', params.difficulty)
+    if (params.createdBy) query = query.eq('created_by', params.createdBy)
+
+    query = query.order('updated_at', { ascending: false })
+
+    const { data, error, count } = await query.range(offset, offset + limit - 1)
+
+    if (error) throw errors.databaseError('Failed to fetch practice sets', error)
+
+    const rows = data || []
+    if (rows.length) {
+      const setIds = rows.map(row => row.id)
+      const { data: questions, error: questionsError } = await supabaseAdmin
+        .from('practice_questions')
+        .select('*')
+        .in('set_id', setIds)
+        .order('order_index', { ascending: true })
+
+      if (questionsError) throw errors.databaseError('Failed to fetch practice questions', questionsError)
+
+      const questionsBySetId = new Map<string, any[]>()
+      for (const question of questions || []) {
+        const current = questionsBySetId.get(question.set_id) || []
+        current.push(question)
+        questionsBySetId.set(question.set_id, current)
+      }
+
+      return {
+        items: rows.map((row) => toSet({ ...row, practice_questions: questionsBySetId.get(row.id) || [] }, { includeQuestions: false })),
+        total: count || 0,
+        limit,
+        offset,
+      }
+    }
+
+    return {
+      items: [],
+      total: 0,
+      limit,
+      offset,
+    }
+  }
+
+  /**
+   * Admin: Get set details without permission check
+   */
+  async getSetForAdmin(setId: string) {
+    const { data: set, error } = await supabaseAdmin
+      .from('practice_sets')
+      .select('*, practice_questions(*)')
+      .eq('id', setId)
+      .order('order_index', { referencedTable: 'practice_questions', ascending: true })
+      .single()
+
+    if (error || !set) throw errors.notFound('Practice set')
+
+    return {
+      ...toSet({ ...set, question_count: set.practice_questions?.length || 0 }),
+      questions: (set.practice_questions || []).map(sanitizeQuestionWithAnswer),
+    }
+  }
+
+  /**
+   * Admin: Update practice set (can edit any set)
+   */
+  async updateSetForAdmin(setId: string, input: CreatePracticeSetInput, _adminId: string) {
+    await validateContent([
+      input.title,
+      input.description,
+      input.topic,
+      ...input.questions.flatMap(q => [
+        q.title,
+        q.prompt,
+        q.explanation,
+        q.correctAnswer,
+        ...(q.options || []),
+      ]),
+    ])
+
+    this.validateQuestions(input.questions)
+
+    const { error } = await supabaseAdmin
+      .from('practice_sets')
+      .update({
+        title: input.title,
+        description: input.description,
+        topic: input.topic,
+        language_id: input.languageId,
+        difficulty: input.difficulty || 'easy',
+        visibility: input.visibility || 'private',
+        status: input.status || 'draft',
+        requirements: input.requirements || {},
+        owner_type: input.visibility === 'official' ? 'official' : 'user',
+      })
+      .eq('id', setId)
+
+    if (error) throw errors.databaseError('Failed to update practice set', error)
+
+    await supabaseAdmin.from('practice_questions').delete().eq('set_id', setId)
+
+    const questions = input.questions.map((question, index) => ({
+      set_id: setId,
+      type: question.type,
+      title: question.title,
+      prompt: question.prompt,
+      options: question.options,
+      correct_answer: question.correctAnswer,
+      starter_code: question.starterCode,
+      test_cases: question.testCases,
+      solution_code: question.solutionCode,
+      explanation: question.explanation,
+      points: question.points || 10,
+      order_index: question.orderIndex ?? index,
+    }))
+
+    const { error: questionError } = await supabaseAdmin.from('practice_questions').insert(questions)
+    if (questionError) {
+      throw errors.databaseError('Failed to update practice questions', questionError)
+    }
+
+    return this.getSetForAdmin(setId)
+  }
+
+  /**
+   * Admin: Delete practice set
+   */
+  async deleteSetForAdmin(setId: string, _adminId: string) {
+    const { error } = await supabaseAdmin.from('practice_sets').delete().eq('id', setId)
+    if (error) throw errors.databaseError('Failed to delete practice set', error)
+
+    return { success: true }
+  }
+
+  /**
+   * Admin: Update practice set status
+   */
+  async updateSetStatus(setId: string, status: 'draft' | 'published', _adminId: string) {
+    const { data, error } = await supabaseAdmin
+      .from('practice_sets')
+      .update({ status })
+      .eq('id', setId)
+      .select('*')
+      .single()
+
+    if (error || !data) throw errors.databaseError('Failed to update practice set status', error)
+
+    return toSet(data)
+  }
+
+  /**
+   * Admin: Update practice set visibility
+   */
+  async updateSetVisibility(setId: string, visibility: 'public' | 'private' | 'unlisted' | 'official', _adminId: string) {
+    const { data, error } = await supabaseAdmin
+      .from('practice_sets')
+      .update({ visibility, owner_type: visibility === 'official' ? 'official' : 'user' })
+      .eq('id', setId)
+      .select('*')
+      .single()
+
+    if (error || !data) throw errors.databaseError('Failed to update practice set visibility', error)
+
+    return toSet(data)
+  }
+
+  /**
+   * Admin: Get practice statistics
+   */
+  async getPracticeStats() {
+    const { data: sets, error: setsError } = await supabaseAdmin
+      .from('practice_sets')
+      .select('id, visibility, status, created_at')
+
+    if (setsError) throw errors.databaseError('Failed to fetch practice sets', setsError)
+
+    const { count: attemptCount, error: attemptsError } = await supabaseAdmin
+      .from('practice_attempts')
+      .select('id', { count: 'exact', head: true })
+
+    if (attemptsError) throw errors.databaseError('Failed to fetch practice attempts', attemptsError)
+
+    const { count: submissionCount, error: submissionsError } = await supabaseAdmin
+      .from('practice_submissions')
+      .select('id', { count: 'exact', head: true })
+
+    if (submissionsError) throw errors.databaseError('Failed to fetch practice submissions', submissionsError)
+
+    const statsData = sets || []
+    const officialSets = statsData.filter(s => s.visibility === 'official').length
+    const publishedSets = statsData.filter(s => s.status === 'published').length
+    const draftSets = statsData.filter(s => s.status === 'draft').length
+
+    return {
+      totalSets: statsData.length,
+      officialSets,
+      publishedSets,
+      draftSets,
+      totalAttempts: attemptCount || 0,
+      totalSubmissions: submissionCount || 0,
     }
   }
 }

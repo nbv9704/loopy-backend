@@ -2,6 +2,8 @@ import { Router } from 'express'
 import * as lessonController from '../controllers/lesson.controller'
 import { optionalAuth } from '../middleware/auth'
 import * as lessonCheckController from '../controllers/lesson-check.controller'
+import { getAIHint } from '../controllers/grading.controller'
+import { submissionRateLimiter } from '../middleware/rateLimiter'
 
 const router = Router()
 
@@ -216,6 +218,15 @@ router.get('/:id', lessonController.getLessonById)
  *         $ref: '#/components/responses/RateLimitError'
  */
 router.get('/:id/exercises', lessonController.getExercisesByLesson)
+
+/**
+ * Route to request an AI hint for the current lesson code.
+ * AI is only used for hints; pass/fail remains deterministic via /check.
+ */
+router.post('/:lessonId/hint', optionalAuth, submissionRateLimiter, (req, res, next) => {
+  req.params.exerciseId = req.params.lessonId
+  return getAIHint(req, res, next)
+})
 
 /**
  * Route to check lesson code using deterministic validation or test-runner.

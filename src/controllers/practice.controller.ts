@@ -4,7 +4,7 @@ import { practiceService } from '../services/practice.service'
 
 export const listSets = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id
+    const userId = req.user?.id
     const result = await practiceService.listSets({
       userId,
       languageId: req.query.languageId as string | undefined,
@@ -26,7 +26,7 @@ export const listSets = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const getSet = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const result = await practiceService.getSet(req.params.setId, req.user!.id)
+    const result = await practiceService.getSet(req.params.setId, req.user?.id)
     res.json({ success: true, data: result })
   } catch (error) {
     next(error)

@@ -338,4 +338,6 @@ router.get('/:id/chapters', languageController.getChaptersByLanguage)
  */
 router.get('/:id/curriculum', languageController.getChaptersWithLessons)
 
+router.get('/:languageId/path/:learningPath/curriculum', languageController.getChaptersWithLessonsByPath)
+
 export default router

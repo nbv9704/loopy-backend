@@ -1,8 +1,11 @@
 /**
- * Grading Orchestrator Service for Auto-Grading System
+ * LEGACY Grading Orchestrator Service for Auto-Grading System
  *
- * Coordinates test-based and AI-based grading, calculates final scores,
- * manages submission history, and handles admin score overrides.
+ * Coordinates the old/parallel test-based and AI-based grading flow.
+ * This service is not the source of truth for modern Learn completion.
+ * Learn pass/fail must remain deterministic via lesson-check.service.ts and
+ * progress is saved only through completeLesson after backend validation.
+ * AI output from this service must not decide Learn completion.
  *
  * @see .kiro/specs/auto-grading-system/design.md
  * Validates Requirements: 2.1, 3.1, 4.1-4.8, 5.1-5.5, 8.1, 9.1-9.6, 10.1-10.6, 14.3

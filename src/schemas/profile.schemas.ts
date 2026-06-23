@@ -7,7 +7,8 @@ export const profileSchemas = {
       avatarUrl: z.string().optional(), // supports http URLs, data: URLs, and preset:id strings
       bio: z.string().max(500, 'Bio không được vượt quá 500 ký tự').optional(),
       preferredLanguage: z.enum(['javascript', 'python', 'cpp']).optional(),
-      learningGoal: z.string().optional(),
+      learningPath: z.string().optional(),
+      learningGoal: z.string().optional(), // backward compatibility for older clients
       onboardingCompleted: z.boolean().optional(),
       experienceLevel: z.string().optional(),
       currentPathId: z.string().uuid('ID lộ trình không hợp lệ').optional().nullable(),

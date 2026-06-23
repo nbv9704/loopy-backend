@@ -14,6 +14,7 @@ import {
   importContent,
 } from '../controllers/admin/content.controller'
 import { bulkImport } from '../controllers/bulk-import.controller'
+import * as practiceAdminController from '../controllers/admin/practice.controller'
 import { supabaseAdmin } from '../db/supabase'
 import { validate } from '../middleware/validate'
 import { contentSchemas } from '../schemas/content.schemas'
@@ -244,6 +245,79 @@ router.delete('/test-cases/:testCaseId', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+// Lesson Step Management - Learn-scoped activities, separate from Practice questions
+router.get('/lessons/:lessonId/steps', async (req, res, next) => {
+  try {
+    const { lessonId } = req.params
+    const { data, error } = await supabaseAdmin
+      .from('lesson_steps')
+      .select('*')
+      .eq('lesson_id', lessonId)
+      .order('order_index')
+    if (error) throw error
+    res.json({ success: true, data: data || [] })
+  } catch (error) { next(error) }
+})
+
+router.post('/lessons/:lessonId/steps', async (req, res, next) => {
+  try {
+    const { lessonId } = req.params
+    const {
+      id,
+      type,
+      title,
+      prompt,
+      options,
+      correct_answer,
+      explanation,
+      hint,
+      is_required,
+      order_index,
+    } = req.body
+
+    if (!type || !prompt || order_index === undefined) {
+      res.status(400).json({
+        success: false,
+        message: 'type, prompt, and order_index are required',
+      })
+      return
+    }
+
+    await validateContent([title, prompt, explanation, hint])
+
+    const row = {
+      ...(id ? { id } : {}),
+      lesson_id: lessonId,
+      type,
+      title: title || '',
+      prompt,
+      options: options ?? [],
+      correct_answer: correct_answer ?? null,
+      explanation: explanation || '',
+      hint: hint || '',
+      is_required: is_required ?? false,
+      order_index,
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('lesson_steps')
+      .upsert(row)
+      .select()
+      .single()
+    if (error) throw error
+    res.json({ success: true, data })
+  } catch (error) { next(error) }
+})
+
+router.delete('/lesson-steps/:stepId', async (req, res, next) => {
+  try {
+    const { stepId } = req.params
+    const { error } = await supabaseAdmin.from('lesson_steps').delete().eq('id', stepId)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (error) { next(error) }
+})
+
 router.post('/lessons', validate(contentSchemas.lesson), async (req, res, next) => {
   try {
     const {
@@ -255,6 +329,9 @@ router.post('/lessons', validate(contentSchemas.lesson), async (req, res, next) 
       starter_code,
       task_description,
       hint,
+      hint_level_1,
+      hint_level_2,
+      hint_level_3,
       common_mistakes,
       solution_code,
       is_aha_lesson,
@@ -278,6 +355,9 @@ router.post('/lessons', validate(contentSchemas.lesson), async (req, res, next) 
       starter_code,
       task_description,
       hint,
+      hint_level_1,
+      hint_level_2,
+      hint_level_3,
       common_mistakes,
       solution_code,
       is_aha_lesson,
@@ -301,6 +381,9 @@ router.post('/lessons', validate(contentSchemas.lesson), async (req, res, next) 
         description,
         task_description,
         hint,
+        hint_level_1,
+        hint_level_2,
+        hint_level_3,
         common_mistakes,
         debug_task_description,
         debug_hint,
@@ -373,6 +456,19 @@ router.delete('/lessons/:lessonId', async (req, res, next) => {
     res.json({ success: true })
   } catch (error) { next(error) }
 })
+
+// ============================================================================
+// PRACTICE SET MANAGEMENT
+// ============================================================================
+
+router.get('/practice/sets', practiceAdminController.listAllSets)
+router.get('/practice/sets/:setId', practiceAdminController.getSet)
+router.post('/practice/sets', practiceAdminController.createSet)
+router.put('/practice/sets/:setId', practiceAdminController.updateSet)
+router.delete('/practice/sets/:setId', practiceAdminController.deleteSet)
+router.put('/practice/sets/:setId/status', practiceAdminController.updateStatus)
+router.put('/practice/sets/:setId/visibility', practiceAdminController.updateVisibility)
+router.get('/practice/stats', practiceAdminController.getStats)
 
 // ============================================================================
 // SYSTEM HEALTH

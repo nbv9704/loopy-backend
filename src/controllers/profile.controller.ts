@@ -51,9 +51,15 @@ export const updateProfile = async (req: AuthRequest, res: Response, next: NextF
       req.body.bio,
     ])
     
+    const updateBody = { ...req.body }
+    if (updateBody.learningGoal && !updateBody.learningPath) {
+      updateBody.learningPath = updateBody.learningGoal
+    }
+    delete updateBody.learningGoal
+    
     const { data, error } = await supabaseAdmin
       .from('user_profiles')
-      .update(keysToSnake(req.body))
+      .update(keysToSnake(updateBody))
       .eq('id', userId)
       .select()
       .single()

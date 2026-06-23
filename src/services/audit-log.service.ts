@@ -4,7 +4,7 @@ import { logger } from '../utils/logger'
 export interface AuditLogEntry {
   adminId: string
   action: 'create' | 'update' | 'delete' | 'import' | 'publish' | 'archive'
-  resourceType: 'lesson' | 'chapter' | 'test_case' | 'import' | 'content_item'
+  resourceType: 'lesson' | 'chapter' | 'test_case' | 'import' | 'content_item' | 'practice_set'
   resourceId?: string
   resourceName?: string
   changes?: Record<string, any>

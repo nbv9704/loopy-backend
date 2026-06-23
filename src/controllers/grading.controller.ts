@@ -1,7 +1,10 @@
 /**
- * Grading Controller - Student Endpoints
+ * LEGACY Grading Controller - Student Endpoints
  *
- * Handles code submission, grading, and submission history for students.
+ * This controller belongs to the old/parallel auto-grading experiment.
+ * It must not be used as the source of truth for modern Learn completion.
+ * Current Learn pass/fail is deterministic via lesson check endpoints, and AI is
+ * allowed only as a hint/support layer.
  *
  * @see .kiro/specs/auto-grading-system/design.md
  * Validates Requirements: 12.1, 12.2, 12.3, 13.1, 13.2, 13.3

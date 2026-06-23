@@ -28,6 +28,22 @@ interface ImportTestCase {
   is_hidden?: boolean
 }
 
+interface ImportLessonStep {
+  id?: string
+  type: 'note' | 'multiple_choice' | 'true_false' | 'fill_blank' | 'short_answer' | 'code_prompt'
+  title?: string
+  prompt: string
+  options?: any[]
+  correct_answer?: any
+  correctAnswer?: any
+  explanation?: string
+  hint?: string
+  is_required?: boolean
+  isRequired?: boolean
+  order_index?: number
+  orderIndex?: number
+}
+
 interface ImportLesson {
   lesson_id?: string
   lessonId?: string
@@ -37,7 +53,13 @@ interface ImportLesson {
   starterCode?: string
   task_description?: string  // "Change" part: what to do
   taskDescription?: string
-  hint?: string              // "Fix" part: help if stuck
+  hint?: string              // Legacy/general help; keep for backward compatibility
+  hint_level_1?: string      // Progressive hint: nudge
+  hintLevel1?: string
+  hint_level_2?: string      // Progressive hint: strategy
+  hintLevel2?: string
+  hint_level_3?: string      // Progressive hint: near-solution
+  hintLevel3?: string
   common_mistakes?: string   // "Fix" part: common beginner errors
   commonMistakes?: string
   solution_code?: string     // "Build" part: final expected code
@@ -52,6 +74,8 @@ interface ImportLesson {
   orderIndex?: number
   test_cases?: ImportTestCase[]
   testCases?: ImportTestCase[]
+  steps?: ImportLessonStep[]
+  lessonSteps?: ImportLessonStep[]
 }
 
 interface ImportPayload {
@@ -90,6 +114,8 @@ export const bulkImport = async (req: AuthRequest, res: Response, next: NextFunc
       lessonsCreated: 0,
       testCasesCreated: 0,
       testCasesReplaced: 0,
+      stepsCreated: 0,
+      stepsReplaced: 0,
       errors: [] as string[],
     }
 
@@ -102,6 +128,8 @@ export const bulkImport = async (req: AuthRequest, res: Response, next: NextFunc
         const hasTestCasesPayload =
           Array.isArray(lessonData.test_cases) || Array.isArray(lessonData.testCases)
         const testCases = lessonData.test_cases || lessonData.testCases || []
+        const hasStepsPayload = Array.isArray(lessonData.steps) || Array.isArray(lessonData.lessonSteps)
+        const steps = lessonData.steps || lessonData.lessonSteps || []
         const difficultyMap = {
           beginner: 'beginner',
           easy: 'beginner',
@@ -131,6 +159,9 @@ export const bulkImport = async (req: AuthRequest, res: Response, next: NextFunc
               starter_code: starterCode,
               task_description: lessonData.task_description || lessonData.taskDescription || '',
               hint: lessonData.hint || '',
+              hint_level_1: lessonData.hint_level_1 || lessonData.hintLevel1 || '',
+              hint_level_2: lessonData.hint_level_2 || lessonData.hintLevel2 || '',
+              hint_level_3: lessonData.hint_level_3 || lessonData.hintLevel3 || '',
               common_mistakes: lessonData.common_mistakes || lessonData.commonMistakes || '',
               solution_code: solutionCode,
               is_aha_lesson: lessonData.is_aha_lesson || lessonData.isAhaLesson || false,
@@ -201,6 +232,60 @@ export const bulkImport = async (req: AuthRequest, res: Response, next: NextFunc
             }
 
             results.testCasesCreated++
+          }
+        }
+
+        if (hasStepsPayload) {
+          const { count: existingStepCount, error: stepCountErr } = await supabaseAdmin
+            .from('lesson_steps')
+            .select('id', { count: 'exact', head: true })
+            .eq('lesson_id', lesson.id)
+
+          if (stepCountErr) {
+            results.errors.push(`Steps for "${lessonData.title}" could not be counted: ${stepCountErr.message}`)
+            continue
+          }
+
+          const { error: deleteStepsErr } = await supabaseAdmin
+            .from('lesson_steps')
+            .delete()
+            .eq('lesson_id', lesson.id)
+
+          if (deleteStepsErr) {
+            results.errors.push(`Steps for "${lessonData.title}" could not be replaced: ${deleteStepsErr.message}`)
+            continue
+          }
+
+          results.stepsReplaced += existingStepCount || 0
+
+          for (const step of steps) {
+            const orderIndexForStep = step.order_index ?? step.orderIndex
+            if (!step.type || !step.prompt || orderIndexForStep === undefined) {
+              results.errors.push(`Step for "${lessonData.title}": missing type, prompt, or order_index`)
+              continue
+            }
+
+            const { error: stepErr } = await supabaseAdmin
+              .from('lesson_steps')
+              .insert({
+                lesson_id: lesson.id,
+                type: step.type,
+                title: step.title || '',
+                prompt: step.prompt,
+                options: step.options ?? [],
+                correct_answer: step.correct_answer ?? step.correctAnswer ?? null,
+                explanation: step.explanation || '',
+                hint: step.hint || '',
+                is_required: step.is_required ?? step.isRequired ?? false,
+                order_index: orderIndexForStep,
+              })
+
+            if (stepErr) {
+              results.errors.push(`Step for "${lessonData.title}" (order ${orderIndexForStep}): ${stepErr.message}`)
+              continue
+            }
+
+            results.stepsCreated++
           }
         }
       } catch (err: unknown) {

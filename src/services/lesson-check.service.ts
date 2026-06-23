@@ -104,13 +104,19 @@ export class LessonCheckService {
       }))
 
       if (mappedTestCases.length === 0) {
-        logger.warn('No test cases found for lesson runner execution, passing by default', { lessonId })
+        logger.error('No test cases found for lesson runner execution; failing safely', { lessonId })
         result = {
-          passed: true,
-          score: 100,
-          output: successOutput,
-          hint: null,
-          checks: [{ label: 'Không tìm thấy test case - Tự động thông qua', passed: true }],
+          passed: false,
+          score: 0,
+          output: '',
+          hint: 'Lesson chưa có test case nên chưa thể kiểm tra. Vui lòng báo admin để cấu hình validation.',
+          checks: [
+            {
+              label: 'Không tìm thấy test case',
+              passed: false,
+              message: 'Lesson cần ít nhất một test case để kiểm tra kết quả một cách deterministic.',
+            },
+          ],
         }
       } else {
         // Run code via test runner

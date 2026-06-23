@@ -381,12 +381,19 @@ export const pvpService = {
     } else {
       mapped.question_text = question.prompt
       
-      // Convert array of strings to array of {id, text} objects for multiple choice
-      if (Array.isArray(question.options) && typeof question.options[0] === 'string') {
+      // Convert array of strings to UI option objects.
+      // Multiple choice uses A/B/C ids, but true_false must keep true/false ids
+      // because the answer checker compares against the canonical boolean strings.
+      if (question.type === 'multiple_choice' && Array.isArray(question.options) && typeof question.options[0] === 'string') {
         const optionIds = ['A', 'B', 'C', 'D', 'E', 'F']
         mapped.options = question.options.map((opt: string, idx: number) => ({
           id: optionIds[idx] || String(idx),
           text: opt
+        }))
+      } else if (question.type === 'true_false') {
+        mapped.options = ['true', 'false'].map(value => ({
+          id: value,
+          text: value === 'true' ? 'True' : 'False',
         }))
       } else {
         mapped.options = question.options

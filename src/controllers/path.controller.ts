@@ -6,12 +6,19 @@ import { keysToCamel } from '../utils/caseConverter'
 /**
  * Get all available learning paths
  */
-export const getAllPaths = async (_req: Request, res: Response, next: NextFunction) => {
+export const getAllPaths = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { data, error } = await supabaseAdmin
+    const { languageId, goalId } = req.query
+
+    let query = supabaseAdmin
       .from('learning_paths')
       .select('*, languages(*)')
       .eq('is_active', true)
+
+    if (languageId) query = query.eq('language_id', String(languageId))
+    if (goalId) query = query.eq('goal_id', String(goalId))
+
+    const { data, error } = await query.order('title', { ascending: true })
 
     if (error) throw error
 
@@ -53,13 +60,32 @@ export const getPathById = async (req: Request, res: Response, next: NextFunctio
 
     if (chaptersError) throw chaptersError
 
+    const chapterRows = chapters || []
+    const chapterIds = chapterRows.map((pc: any) => pc.chapter_id)
+    const lessonCounts = new Map<string, number>()
+
+    if (chapterIds.length > 0) {
+      const { data: lessons, error: lessonsError } = await supabaseAdmin
+        .from('lessons')
+        .select('chapter_id')
+        .in('chapter_id', chapterIds)
+        .eq('status', 'published')
+
+      if (lessonsError) throw lessonsError
+
+      for (const lesson of lessons || []) {
+        lessonCounts.set(lesson.chapter_id, (lessonCounts.get(lesson.chapter_id) || 0) + 1)
+      }
+    }
+
     res.json({
       success: true,
       data: keysToCamel({
         path,
-        chapters: (chapters || []).map((pc: any) => ({
+        chapters: chapterRows.map((pc: any) => ({
           ...pc.chapters,
           order_index: pc.order_index, // Use the path-specific order
+          lesson_count: lessonCounts.get(pc.chapter_id) || 0,
         })),
       }),
     })
