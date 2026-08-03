@@ -18,11 +18,11 @@ export function setupMiddleware(app: Express): void {
   // Security middleware
   app.use(helmetMiddleware)
 
+  // CORS must run before rate limiting so preflight and 429 responses include CORS headers.
+  app.use(corsMiddleware)
+
   // Rate limiting (MUST run before body parsing to prevent payload-based DoS)
   app.use(rateLimiter)
-
-  // CORS configuration
-  app.use(corsMiddleware)
 
   // CSRF protection for mutating requests
   app.use(csrfProtection)

@@ -18,6 +18,10 @@ export const rateLimiter = isDevelopment
       },
       standardHeaders: true,
       legacyHeaders: false,
+      skip: (req: any) =>
+        req.method === 'OPTIONS' ||
+        req.path === '/api/health' ||
+        req.path === '/api/admin-auth/login',
     })
 
 export const authLimiter = isDevelopment
