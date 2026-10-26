@@ -3,6 +3,8 @@ import { authenticateSession } from '../middleware/authenticateSession'
 import { requireAdmin } from '../middleware/requireAdmin'
 import { authLimiter } from '../middleware/rateLimiter'
 import * as adminApiController from '../controllers/admin-api.controller'
+import { validate } from '../middleware/validate'
+import { adminSchemas } from '../schemas/admin.schemas'
 
 /**
  * Admin API Routes - JSON API endpoints for React SPA
@@ -18,7 +20,7 @@ const router = Router()
  * Login endpoint
  * POST /api/admin/login
  */
-router.post('/login', authLimiter, adminApiController.login)
+router.post('/login', authLimiter, validate(adminSchemas.login), adminApiController.login)
 
 // ============================================================================
 // PROTECTED ROUTES (SESSION AUTHENTICATION REQUIRED)

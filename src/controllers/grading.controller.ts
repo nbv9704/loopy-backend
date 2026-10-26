@@ -13,13 +13,11 @@
 import { Response, NextFunction } from 'express'
 import { AuthRequest } from '../middleware/auth'
 import { gradingOrchestratorService } from '../services/grading-orchestrator.service'
-import { aiAnalyzerService } from '../services/ai-analyzer.service'
+import { generateLessonHint } from '../services/grading/hint'
+import { readPublishedGradingContext } from '../services/grading/lesson-context'
 import { supabaseAdmin } from '../db/supabase'
 import { errors } from '../middleware/errorHandler'
-
-
-/** Dev fallback userId when not authenticated */
-const getDevUserId = (req: AuthRequest) => req.user?.id || null
+import { toPublicTestResults } from '../services/grading/public-test-results'
 
 /**
  * POST /api/exercises/:exerciseId/submit
@@ -28,72 +26,23 @@ const getDevUserId = (req: AuthRequest) => req.user?.id || null
  */
 export const submitForGrading = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = getDevUserId(req)
+    const userId = req.user?.id
+    if (!userId) throw errors.authRequired()
     const { exerciseId } = req.params
-    const {
-      code,
-      gradingMethod = 'both',
-      language = 'javascript',
-      starterCode,
-      lessonTitle,
-      lessonDescription,
-      lessonInsight,
-      gradingDepth,
-    } = req.body
-
-    // Validate input (Requirement 13.6)
-    if (!code || typeof code !== 'string') {
-      throw errors.validationError({ field: 'code', message: 'Code is required' })
-    }
-
-    if (code.length > 10240) {
-      throw errors.validationError({
-        field: 'code',
-        message: 'Code exceeds maximum length of 10KB',
-      })
-    }
-
-    if (!['test', 'ai', 'both'].includes(gradingMethod)) {
-      throw errors.validationError({
-        field: 'gradingMethod',
-        message: 'gradingMethod must be one of: test, ai, both',
-      })
-    }
-
-    if (!['javascript', 'python', 'cpp'].includes(language)) {
-      throw errors.validationError({
-        field: 'language',
-        message: 'language must be one of: javascript, python, cpp',
-      })
-    }
-
-    // Grade submission
+    const { code, language, gradingMethod, gradingDepth } = req.body
     const result = await gradingOrchestratorService.gradeSubmission({
       userId,
       exerciseId,
       code,
       language,
       gradingMethod,
-      starterCode: typeof starterCode === 'string' ? starterCode : undefined,
-      lessonTitle: typeof lessonTitle === 'string' ? lessonTitle : undefined,
-      lessonDescription: typeof lessonDescription === 'string' ? lessonDescription : undefined,
-      lessonInsight: typeof lessonInsight === 'string' ? lessonInsight : undefined,
-      gradingDepth: ['quick', 'careful', 'thorough'].includes(gradingDepth)
-        ? gradingDepth
-        : 'quick',
+      gradingDepth,
     })
 
     // Filter hidden test cases from response for non-admin users (Requirement 13.3)
     const filteredFeedback = {
       ...result.feedback,
-      testResults: result.feedback.testResults
-        ? {
-            ...result.feedback.testResults,
-            results: result.feedback.testResults.results.filter(
-              (r: { isHidden?: boolean }) => !r.isHidden
-            ),
-          }
-        : null,
+      testResults: toPublicTestResults(result.feedback.testResults),
     }
 
     res.json({
@@ -121,25 +70,12 @@ export const submitForGrading = async (req: AuthRequest, res: Response, next: Ne
 export const getAIHint = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { exerciseId } = req.params
-    const { code, language = 'javascript', starterCode, lessonTitle, lessonDescription, lessonInsight, outputLogs } = req.body
-
-    if (!code) {
-      throw errors.validationError({ field: 'code', message: 'Code is required' })
-    }
-
-    const result = await aiAnalyzerService.generateHint({
-      code,
-      language,
-      exerciseTitle: lessonTitle || exerciseId,
-      exerciseQuestion: lessonDescription || '',
-      starterCode,
-      lessonInsight,
-      outputLogs
-    })
+    const { code, language, outputLogs } = req.body
+    const result = await generateLessonHint(exerciseId, { code, language, outputLogs })
 
     res.json({
       success: true,
-      data: result
+      data: result,
     })
   } catch (error) {
     next(error)
@@ -160,6 +96,8 @@ export const getSubmissionHistory = async (req: AuthRequest, res: Response, next
     const { exerciseId } = req.params
     const page = parseInt(req.query.page as string) || 1
     const limit = parseInt(req.query.limit as string) || 10
+
+    await readPublishedGradingContext(exerciseId)
 
     const history = await gradingOrchestratorService.getSubmissionHistory(
       userId,
@@ -190,15 +128,20 @@ export const getSubmissionDetail = async (req: AuthRequest, res: Response, next:
     }
     const { exerciseId, submissionId } = req.params
 
+    await readPublishedGradingContext(exerciseId)
+
     const { data: submission, error } = await supabaseAdmin
       .from('lesson_submissions')
-      .select('*')
+      .select(
+        'id, code, test_score, ai_score, final_score, grade_level, test_results, ai_analysis, feedback, grading_method, graded_at, submitted_at, execution_time'
+      )
       .eq('id', submissionId)
       .eq('lesson_id', exerciseId)
       .eq('user_id', userId)
-      .single()
+      .maybeSingle()
 
-    if (error || !submission) {
+    if (error) throw errors.databaseError('Không tải được bài nộp. Vui lòng thử lại.')
+    if (!submission) {
       throw errors.notFound('Submission')
     }
 
@@ -211,7 +154,7 @@ export const getSubmissionDetail = async (req: AuthRequest, res: Response, next:
         aiScore: submission.ai_score,
         finalScore: submission.final_score,
         gradeLevel: submission.grade_level,
-        testResults: submission.test_results,
+        testResults: toPublicTestResults(submission.test_results),
         aiAnalysis: submission.ai_analysis,
         feedback: submission.feedback,
         gradingMethod: submission.grading_method,

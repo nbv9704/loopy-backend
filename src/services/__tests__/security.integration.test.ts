@@ -1,5 +1,6 @@
 import express from 'express'
 import request from 'supertest'
+import { config } from '../../config'
 import { csrfProtection } from '../../middleware/csrf'
 import { concurrencyLimiter, resetActiveExecutions } from '../../middleware/concurrencyLimiter'
 
@@ -22,7 +23,7 @@ describe('Security Integration Tests (CORS, CSRF, Concurrency Limit)', () => {
     app.post('/test-concurrency', concurrencyLimiter, (req, res) => {
       activeInHandler++
       // Delay response to allow concurrent requests to build up
-      const delay = parseInt(req.query.delay as string || '0', 10)
+      const delay = parseInt((req.query.delay as string) || '0', 10)
       if (delay > 0) {
         setTimeout(() => {
           activeInHandler = Math.max(0, activeInHandler - 1)
@@ -41,21 +42,19 @@ describe('Security Integration Tests (CORS, CSRF, Concurrency Limit)', () => {
 
   describe('CSRF Protection', () => {
     it('should block mutating requests (POST) without Origin/Referer headers', async () => {
-      const response = await request(app)
-        .post('/test-csrf')
-        .send({ data: 'test' })
+      const response = await request(app).post('/test-csrf').send({ data: 'test' })
 
       expect(response.status).toBe(403)
       expect(response.body).toEqual({
         success: false,
-        message: 'Forbidden: CSRF validation failed'
+        message: 'Forbidden: CSRF validation failed',
       })
     })
 
     it('should allow mutating requests (POST) with whitelisted Origin header', async () => {
       const response = await request(app)
         .post('/test-csrf')
-        .set('Origin', 'https://loopy.vercel.app')
+        .set('Origin', config.frontendUrl)
         .send({ data: 'test' })
 
       expect(response.status).toBe(200)
@@ -68,6 +67,14 @@ describe('Security Integration Tests (CORS, CSRF, Concurrency Limit)', () => {
         .set('Origin', 'https://unauthorized-domain.com')
         .send({ data: 'test' })
 
+      expect(response.status).toBe(403)
+    })
+
+    it('does not implicitly authorize a previous deployment domain', async () => {
+      const response = await request(app)
+        .post('/test-csrf')
+        .set('Origin', 'https://loopy-frontend-blond.vercel.app')
+        .send({ data: 'test' })
       expect(response.status).toBe(403)
     })
   })
@@ -96,7 +103,7 @@ describe('Security Integration Tests (CORS, CSRF, Concurrency Limit)', () => {
       // Poll until all 5 requests have entered the handler
       for (let i = 0; i < 50; i++) {
         if (activeInHandler === 5) break
-        await new Promise((resolve) => setTimeout(resolve, 10))
+        await new Promise(resolve => setTimeout(resolve, 10))
       }
 
       expect(activeInHandler).toBe(5)

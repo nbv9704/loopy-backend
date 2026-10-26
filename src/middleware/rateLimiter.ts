@@ -21,6 +21,7 @@ export const rateLimiter = isDevelopment
       skip: (req: any) =>
         req.method === 'OPTIONS' ||
         req.path === '/api/health' ||
+        req.path === '/api/ready' ||
         req.path === '/api/admin-auth/login',
     })
 

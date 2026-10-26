@@ -14,6 +14,40 @@ const router = Router()
 // All PvP routes require authentication
 router.use(authenticate)
 
+/**
+ * @openapi
+ * /api/pvp/eligibility:
+ *   get:
+ *     tags: [PvP]
+ *     summary: Read the current user's saved PvP eligibility
+ *     description: Checks onboarding and at least one completed published lesson. Cached profile points do not decide access. Matchmaking and joining recheck permissions at commit.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Authoritative eligibility preview
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   required: [eligible, onboardingCompleted, hasCompletedLesson]
+ *                   properties:
+ *                     eligible:
+ *                       type: boolean
+ *                     onboardingCompleted:
+ *                       type: boolean
+ *                     hasCompletedLesson:
+ *                       type: boolean
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+router.get('/eligibility', pvpController.getEligibility)
+
 // ============================================================================
 // MATCH MANAGEMENT
 // ============================================================================
@@ -36,35 +70,35 @@ router.use(authenticate)
  *             type: object
  *             required:
  *               - mode
- *               - maxPlayers
- *               - timePerQuestion
- *               - questionCount
+ *               - max_players
+ *               - time_per_question
+ *               - question_count
  *             properties:
  *               mode:
  *                 type: string
  *                 enum: [1v1, battle_royale]
  *                 description: Match mode
  *                 example: 1v1
- *               languageId:
+ *               language_id:
  *                 type: string
- *                 format: uuid
+ *                 example: javascript
  *                 description: Programming language ID (optional)
  *               difficulty:
  *                 type: string
  *                 enum: [easy, medium, hard]
  *                 description: Question difficulty
  *                 example: medium
- *               maxPlayers:
+ *               max_players:
  *                 type: integer
  *                 minimum: 2
  *                 description: Maximum number of players
  *                 example: 2
- *               timePerQuestion:
+ *               time_per_question:
  *                 type: integer
  *                 minimum: 30
  *                 description: Time limit per question in seconds
  *                 example: 60
- *               questionCount:
+ *               question_count:
  *                 type: integer
  *                 minimum: 1
  *                 maximum: 10
@@ -112,7 +146,7 @@ router.post('/matches/:matchId/join', validate(pvpSchemas.getMatch), pvpControll
  *     tags:
  *       - PvP
  *     summary: Get current question
- *     description: Get the current question for an active match
+ *     description: Read only the currently open round as an active non-forfeited participant. Waiting, paused/closed and not-yet-open rounds return 409.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -125,10 +159,18 @@ router.post('/matches/:matchId/join', validate(pvpSchemas.getMatch), pvpControll
  *     responses:
  *       200:
  *         description: Current question retrieved successfully
+ *       409:
+ *         description: Question is not open
+ *       403:
+ *         description: Active match membership required
  *       404:
  *         $ref: '#/components/responses/NotFoundError'
  */
-router.get('/matches/:matchId/question', pvpController.getCurrentQuestion)
+router.get(
+  '/matches/:matchId/question',
+  validate(pvpSchemas.getMatch),
+  pvpController.getCurrentQuestion
+)
 
 // ============================================================================
 // MATCHMAKING
@@ -141,7 +183,7 @@ router.get('/matches/:matchId/question', pvpController.getCurrentQuestion)
  *     tags:
  *       - PvP
  *     summary: Find or create a match
- *     description: Matchmaking endpoint - finds an available match or creates a new one
+ *     description: Atomically resume an existing live membership or find/create and join a room. Eligibility, queue capacity, room creation and joining commit together; repeated requests do not create another membership. Missing official questions returns 409; missing schema returns 503.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -157,16 +199,20 @@ router.get('/matches/:matchId/question', pvpController.getCurrentQuestion)
  *                 type: string
  *                 enum: [1v1, battle_royale]
  *                 example: 1v1
- *               languageId:
+ *               language_id:
  *                 type: string
- *                 format: uuid
+ *                 example: javascript
  *               difficulty:
  *                 type: string
  *                 enum: [easy, medium, hard]
  *                 example: medium
  *     responses:
  *       200:
- *         description: Match found or created
+ *         description: Match and membership committed successfully
+ *       409:
+ *         description: No official questions available for the selection
+ *       503:
+ *         description: Matchmaking schema is not ready
  *       401:
  *         $ref: '#/components/responses/UnauthorizedError'
  */

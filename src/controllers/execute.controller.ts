@@ -2,44 +2,14 @@ import { Response, NextFunction } from 'express'
 import { supabaseAdmin } from '../db/supabase'
 import { AuthRequest } from '../middleware/auth'
 import { executeCode as executeCodeService } from '../services/codeExecution.service'
-import { logger } from '../utils/logger'
-import { config } from '../config'
-import { PISTON_LANGUAGE_CONFIG } from '../services/piston-executor.service'
+import { logCodeExecution } from '../services/execution/log'
+import { executionCapabilities } from '../services/execution/languages'
+import { errors } from '../middleware/errorHandler'
+import { lessonCheckService } from '../services/lesson-check.service'
 
 export const getCapabilities = async (_req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const isPistonEnabled = !!config.piston.apiUrl
-    const isGlotEnabled = !!config.glot.apiToken
-    const externalRunner = isPistonEnabled ? 'piston' : (isGlotEnabled ? 'glot' : 'piston')
-    const externalRunnerSupported = isPistonEnabled || isGlotEnabled
-    const externalRunnerReason = externalRunnerSupported
-      ? null
-      : 'Cần cấu hình PISTON_API_URL hoặc GLOT_API_TOKEN để bật runner cho ngôn ngữ này.'
-
-    const pistonCapabilities = Object.keys(PISTON_LANGUAGE_CONFIG).reduce<Record<string, { supported: boolean; runner: 'piston' | 'glot'; requiresRunner: boolean; reason: string | null }>>((acc, language) => {
-      acc[language] = {
-        supported: externalRunnerSupported,
-        runner: externalRunner,
-        requiresRunner: true,
-        reason: externalRunnerReason,
-      }
-      return acc
-    }, {})
-
-    res.json({
-      success: true,
-      data: {
-        capabilities: {
-          javascript: {
-            supported: true,
-            runner: 'local',
-            requiresRunner: false,
-            reason: null,
-          },
-          ...pistonCapabilities,
-        },
-      },
-    })
+    res.json({ success: true, data: { capabilities: executionCapabilities() } })
   } catch (error) {
     next(error)
   }
@@ -53,23 +23,9 @@ export const executeCode = async (req: AuthRequest, res: Response, next: NextFun
     const result = await executeCodeService(language, code)
     const output = result.output
     const error = result.error
-    const executionTime = result.executionTime ?? 0
+    const executionTime = result.executionTime
 
-    // Log execution (optional, only if user is authenticated)
-    if (userId) {
-      try {
-        await supabaseAdmin.from('code_executions').insert({
-          user_id: userId,
-          language,
-          code,
-          output,
-          error,
-          execution_time: executionTime,
-        })
-      } catch (err: unknown) {
-        logger.error('Failed to log execution:', err)
-      }
-    }
+    if (userId) void logCodeExecution({ userId, language, code, output, error, executionTime })
 
     res.json({
       success: true,
@@ -87,34 +43,32 @@ export const executeCode = async (req: AuthRequest, res: Response, next: NextFun
 export const validateCode = async (_req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { exerciseId, code } = _req.body
+    const userId = _req.user?.id
 
     const { data: lesson, error: lessonError } = await supabaseAdmin
       .from('lessons')
-      .select('id, chapters(languages(id))')
+      .select('id, chapters!inner(language_id)')
       .eq('id', exerciseId)
-      .single()
+      .eq('status', 'published')
+      .maybeSingle()
 
-    if (lessonError || !lesson) {
-      res.status(404).json({
-        success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Exercise/Lesson not found',
-        },
-      })
-      return
-    }
-
-    const language = ((lesson.chapters as any)?.languages?.id as string | undefined) || 'javascript'
-    const result = await executeCodeService(language, code)
+    if (lessonError) throw errors.databaseError('Không tải được bài học để kiểm tra.')
+    if (!lesson) throw errors.notFound('Lesson')
+    const chapter = Array.isArray(lesson.chapters) ? lesson.chapters[0] : lesson.chapters
+    if (!chapter?.language_id) throw errors.databaseError('Bài học chưa có ngôn ngữ hợp lệ.')
+    const language = chapter.language_id
+    const result = await lessonCheckService.checkLesson(exerciseId, userId, code, language)
 
     res.json({
       success: true,
       data: {
-        isCorrect: !result.error,
+        submissionId: result.submissionId,
+        isCorrect: result.passed,
+        passed: result.passed,
+        score: result.score,
         output: result.output,
-        error: result.error,
-        executionTime: result.executionTime ?? 0,
+        error: result.hint,
+        checks: result.checks,
       },
     })
   } catch (error) {

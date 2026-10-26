@@ -8,7 +8,7 @@ import { AuthRequest } from '../middleware/auth'
 import { pvpService } from '../services/pvp.service'
 import { supabaseAdmin } from '../db/supabase'
 import { logger } from '../utils/logger'
-import { errors } from '../middleware/errorHandler'
+import { AppError, errors } from '../middleware/errorHandler'
 
 /**
  * Create a new PvP match
@@ -16,6 +16,11 @@ import { errors } from '../middleware/errorHandler'
  */
 export const createMatch = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const userId = req.user?.id
+    if (!userId) throw errors.unauthorized()
+
+    await pvpService.assertEligible(userId)
+
     const { mode, language_id, difficulty, max_players, time_per_question, question_count } =
       req.body
 
@@ -79,18 +84,7 @@ export const joinMatch = async (req: AuthRequest, res: Response, next: NextFunct
     // 1. Find the match (could be ID or Room Code)
     const match = await pvpService.getMatch(matchId)
 
-    // 2. Check if already full
-    const { data: participants } = await supabaseAdmin
-      .from('pvp_participants')
-      .select('user_id')
-      .eq('match_id', match.id)
-
-    const isAlreadyIn = participants?.some(p => p.user_id === userId)
-    if (!isAlreadyIn && participants && participants.length >= match.max_players) {
-      throw errors.badRequest('Match is already full')
-    }
-
-    // 3. Join the match in DB
+    // Capacity, membership and status are checked together under the match lock.
     const participant = await pvpService.joinMatch(match.id, userId)
 
     // 4. Notify other participants via socket
@@ -101,7 +95,7 @@ export const joinMatch = async (req: AuthRequest, res: Response, next: NextFunct
 
     res.json({
       success: true,
-      data: { match },
+      data: { match: await pvpService.getMatch(match.id) },
     })
   } catch (error) {
     next(error)
@@ -115,99 +109,27 @@ export const joinMatch = async (req: AuthRequest, res: Response, next: NextFunct
 export const findMatch = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?.id
-    if (!userId) {
-      throw errors.unauthorized()
-    }
-
-    const { language_id, difficulty, mode = '1v1' } = req.body
-
-    logger.info('Matchmaking request:', { userId, language_id, difficulty, mode })
-
-    // Try to find an existing waiting match
-    let query = supabaseAdmin
-      .from('pvp_matches')
-      .select('*, pvp_participants(count)')
-      .eq('status', 'waiting')
-      .eq('mode', mode)
-
-    if (difficulty) {
-      query = query.eq('difficulty', difficulty)
-    }
-
-    if (language_id) {
-      query = query.eq('language_id', language_id)
-    }
-
-    const { data: existingMatches, error: searchError } = await query
-
-    if (searchError) {
-      logger.error('Search error:', searchError)
-      throw errors.databaseError('Failed to search for matches', searchError)
-    }
-
-    logger.info(`Existing matches found: ${existingMatches?.length || 0}`)
-
-    // Find a match that's not full
-    let match = existingMatches?.find((m: any) => {
-      const participantCount = m.pvp_participants?.[0]?.count || 0
-      logger.info(`Match ${m.id}: ${participantCount}/${m.max_players} players`)
-      return participantCount < m.max_players
-    })
-
-    // If no match found, create new one
-    if (!match) {
-      logger.info('No available match found, creating new one...')
+    if (!userId) throw errors.unauthorized()
+    const result = await pvpService.findMatch(userId, req.body)
+    // The result has already committed; optional realtime notification cannot undo it.
+    if (!result.replayed) {
       try {
-        match = await pvpService.createMatch({
-          mode,
-          language_id,
-          difficulty,
-          max_players: mode === '1v1' ? 2 : 10,
-          time_per_question: 30,
-          question_count: 5,
-        })
-        logger.info(`New match created: ${match.id}`)
-      } catch (createError: any) {
-        logger.error('Failed to create match:', createError)
-        throw createError
+        req.app.get('io')?.to(result.match.id).emit('participant:joined', result.participant)
+      } catch {
+        logger.warn('PvP matchmaking notification unavailable')
       }
-    } else {
-      logger.info(`Found existing match: ${match.id}`)
     }
-
-    // Join the match
-    let isNewJoin = false
-    try {
-      const participant = await pvpService.joinMatch(match.id, userId)
-      logger.info('User joined match successfully')
-
-      // Check if this is a new join (not the match creator)
-      const { data: allParticipants } = await supabaseAdmin
-        .from('pvp_participants')
-        .select('user_id')
-        .eq('match_id', match.id)
-
-      isNewJoin = (allParticipants?.length || 0) > 1
-
-      // If new join, emit socket event to notify other participants
-      if (isNewJoin) {
-        const io = (req.app as any).get('io')
-        if (io) {
-          logger.info(`Emitting participant:joined event to room: ${match.id}`)
-          io.to(match.id).emit('participant:joined', participant)
-        }
-      }
-    } catch (joinError: any) {
-      logger.error('Failed to join match:', joinError)
-      throw joinError
-    }
-
-    res.json({
-      success: true,
-      data: { match },
-    })
+    res.json({ success: true, data: { match: result.match } })
   } catch (error) {
-    logger.error('Matchmaking error:', error)
+    next(error)
+  }
+}
+
+export const getEligibility = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) throw errors.unauthorized()
+    res.json({ success: true, data: await pvpService.getEligibility(req.user.id) })
+  } catch (error) {
     next(error)
   }
 }
@@ -219,8 +141,31 @@ export const findMatch = async (req: AuthRequest, res: Response, next: NextFunct
 export const getCurrentQuestion = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { matchId } = req.params
+    const userId = req.user?.id
+    if (!userId) {
+      throw errors.unauthorized()
+    }
 
-    const question = await pvpService.getCurrentQuestion(matchId)
+    const match = await pvpService.getMatch(matchId)
+    const isParticipant = match.participants?.some(
+      participant => participant.user_id === userId && !participant.left_at
+    )
+    if (!isParticipant) {
+      throw errors.forbidden()
+    }
+    if (
+      match.status !== 'in_progress' ||
+      !match.question_started_at ||
+      match.question_closed_at ||
+      match.question_started_index !== match.current_question_index
+    )
+      throw new AppError(
+        409,
+        'PVP_QUESTION_NOT_OPEN',
+        'Câu hỏi chưa mở hoặc đã đóng. Hãy chờ đồng bộ vòng đấu.'
+      )
+
+    const question = await pvpService.getCurrentQuestion(match.id)
 
     res.json({
       success: true,

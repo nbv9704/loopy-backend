@@ -11,6 +11,8 @@ import { authenticate } from '../middleware/auth'
 import { authenticateSession } from '../middleware/authenticateSession'
 import { requireAdmin } from '../middleware/requireAdmin'
 import { submissionRateLimiter } from '../middleware/rateLimiter'
+import { validate } from '../middleware/validate'
+import { gradingSchemas } from '../schemas/grading.schemas'
 import {
   submitForGrading,
   getSubmissionHistory,
@@ -132,7 +134,13 @@ const router = Router()
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.post('/exercises/:exerciseId/submit', authenticate, submissionRateLimiter, submitForGrading)
+router.post(
+  '/exercises/:exerciseId/submit',
+  authenticate,
+  submissionRateLimiter,
+  validate(gradingSchemas.submit),
+  submitForGrading
+)
 
 /**
  * @openapi
@@ -145,7 +153,13 @@ router.post('/exercises/:exerciseId/submit', authenticate, submissionRateLimiter
  *     security:
  *       - bearerAuth: []
  */
-router.post('/exercises/:exerciseId/hint', authenticate, submissionRateLimiter, getAIHint)
+router.post(
+  '/exercises/:exerciseId/hint',
+  authenticate,
+  submissionRateLimiter,
+  validate(gradingSchemas.hint),
+  getAIHint
+)
 
 /**
  * @openapi
@@ -212,7 +226,12 @@ router.post('/exercises/:exerciseId/hint', authenticate, submissionRateLimiter, 
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/exercises/:exerciseId/submissions', authenticate, getSubmissionHistory)
+router.get(
+  '/exercises/:exerciseId/submissions',
+  authenticate,
+  validate(gradingSchemas.history),
+  getSubmissionHistory
+)
 
 /**
  * @openapi
@@ -308,7 +327,12 @@ router.get('/exercises/:exerciseId/submissions', authenticate, getSubmissionHist
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/exercises/:exerciseId/submissions/:submissionId', authenticate, getSubmissionDetail)
+router.get(
+  '/exercises/:exerciseId/submissions/:submissionId',
+  authenticate,
+  validate(gradingSchemas.detail),
+  getSubmissionDetail
+)
 
 // ============================================================================
 // ADMIN ENDPOINTS (Session auth + admin role)
@@ -369,6 +393,7 @@ router.put(
   '/admin/submissions/:submissionId/override',
   authenticateSession,
   requireAdmin,
+  validate(gradingSchemas.adminOverride),
   overrideScore
 )
 
@@ -405,6 +430,7 @@ router.get(
   '/admin/exercises/:exerciseId/test-cases',
   authenticateSession,
   requireAdmin,
+  validate(gradingSchemas.adminTestCases),
   getTestCases
 )
 
@@ -469,6 +495,7 @@ router.post(
   '/admin/exercises/:exerciseId/test-cases',
   authenticateSession,
   requireAdmin,
+  validate(gradingSchemas.adminCreateTestCase),
   createTestCase
 )
 

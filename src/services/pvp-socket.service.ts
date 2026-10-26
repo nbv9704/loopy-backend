@@ -5,16 +5,18 @@
 
 import { Server as SocketIOServer, Socket } from 'socket.io'
 import { Server as HTTPServer } from 'http'
-import { config } from '../config'
 import { logger } from '../utils/logger'
 import { pvpService } from './pvp.service'
 import { supabaseAdmin } from '../db/supabase'
+import { getAllowedOrigins } from '../utils/origins'
 import { observability } from './observability.service'
+import { createPvPSocketBoundary, pvpSocketSchemas } from './pvp/socket-boundary'
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
   InterServerEvents,
   SocketData,
+  PvPSubmission,
 } from '../types/pvp.types'
 
 export class PvPSocketService {
@@ -29,16 +31,43 @@ export class PvPSocketService {
   private disconnectTimers: Map<string, NodeJS.Timeout> = new Map() // Grace period timers keyed by `matchId:userId`
   private pausedMatches: Set<string> = new Set() // Matches currently paused due to disconnect
   private endingQuestions: Set<string> = new Set() // Mutex: prevent double endQuestion calls
+  private pendingTimers = new Set<NodeJS.Timeout>()
+  private stopping = false
 
   private static readonly DISCONNECT_GRACE_SECONDS = 30
+
+  private schedule(task: () => void | Promise<void>, delay: number): NodeJS.Timeout {
+    const timer = setTimeout(() => {
+      this.pendingTimers.delete(timer)
+      if (!this.stopping) {
+        Promise.resolve()
+          .then(task)
+          .catch(error => logger.error('PvP scheduled task failed', error))
+      }
+    }, delay)
+    if (this.stopping) clearTimeout(timer)
+    else this.pendingTimers.add(timer)
+    return timer
+  }
+
+  public async close(): Promise<void> {
+    this.stopping = true
+    for (const timer of this.pendingTimers) clearTimeout(timer)
+    this.pendingTimers.clear()
+    this.matchTimers.clear()
+    this.disconnectTimers.clear()
+    this.questionStartTimes.clear()
+    await new Promise<void>(resolve => this.io.close(() => resolve()))
+  }
 
   constructor(httpServer: HTTPServer) {
     this.io = new SocketIOServer(httpServer, {
       cors: {
-        origin: config.frontendUrl,
+        origin: getAllowedOrigins(),
         credentials: true,
       },
       path: '/socket.io',
+      maxHttpBufferSize: 64 * 1024,
     })
 
     this.setupMiddleware()
@@ -99,25 +128,87 @@ export class PvPSocketService {
       ) => {
         const userId = socket.data.userId
         logger.info(`User connected: ${userId} (${socket.id})`)
+        const boundary = createPvPSocketBoundary({
+          emitError: message => socket.emit('error', { message }),
+          currentRoom: () => socket.data.matchId,
+          isStopping: () => this.stopping,
+        })
 
         // Match lifecycle events
-        socket.on('match:join', matchId => this.handleMatchJoin(socket, matchId))
-        socket.on('match:leave', matchId => this.handleMatchLeave(socket, matchId))
-        socket.on('match:ready', matchId => this.handleMatchReady(socket, matchId))
+        socket.on(
+          'match:join',
+          boundary.bind(pvpSocketSchemas.room, matchId => this.handleMatchJoin(socket, matchId), {
+            serial: true,
+            minIntervalMs: 250,
+          })
+        )
+        socket.on(
+          'match:leave',
+          boundary.bind(pvpSocketSchemas.room, matchId => this.handleMatchLeave(socket, matchId), {
+            serial: true,
+          })
+        )
+        socket.on(
+          'match:ready',
+          boundary.bind(
+            pvpSocketSchemas.matchId,
+            matchId => this.handleMatchReady(socket, matchId),
+            { serial: true, room: id => id, minIntervalMs: 500 }
+          )
+        )
 
         // Submission events
-        socket.on('submission:answer', payload => this.handleSubmitAnswer(socket, payload))
-        socket.on('submission:code', payload => this.handleSubmitCode(socket, payload))
+        socket.on(
+          'submission:answer',
+          boundary.bind(
+            pvpSocketSchemas.answer,
+            payload => this.handleSubmitAnswer(socket, payload),
+            { room: value => value.matchId, group: 'submission' }
+          )
+        )
+        socket.on(
+          'submission:code',
+          boundary.bind(pvpSocketSchemas.code, payload => this.handleSubmitCode(socket, payload), {
+            room: value => value.matchId,
+            group: 'submission',
+          })
+        )
 
         // Reaction events
-        socket.on('reaction:send', payload => this.handleSendReaction(socket, payload))
+        socket.on(
+          'reaction:send',
+          boundary.bind(
+            pvpSocketSchemas.reaction,
+            payload => this.handleSendReaction(socket, payload),
+            { room: value => value.matchId, minIntervalMs: 750 }
+          )
+        )
 
         // Typing indicators
-        socket.on('typing:start', matchId => this.handleTypingStart(socket, matchId))
-        socket.on('typing:stop', matchId => this.handleTypingStop(socket, matchId))
+        socket.on(
+          'typing:start',
+          boundary.bind(
+            pvpSocketSchemas.matchId,
+            matchId => this.handleTypingStart(socket, matchId),
+            { room: id => id, minIntervalMs: 300 }
+          )
+        )
+        socket.on(
+          'typing:stop',
+          boundary.bind(
+            pvpSocketSchemas.matchId,
+            matchId => this.handleTypingStop(socket, matchId),
+            { room: id => id, minIntervalMs: 300 }
+          )
+        )
 
         // Disconnect
-        socket.on('disconnect', () => this.handleDisconnect(socket))
+        socket.on('disconnect', () => {
+          boundary.close()
+          void this.handleDisconnect(socket).catch(error =>
+            logger.error('PvP disconnect failed', error)
+          )
+        })
       }
     )
   }
@@ -137,38 +228,25 @@ export class PvPSocketService {
       // Resolve room code to actual UUID
       const matchDetails = await pvpService.getMatch(matchIdOrCode)
       const matchId = matchDetails.id
+      if (socket.disconnected || this.stopping) return
 
-      // Check if user is already a participant
-      const { data: existingParticipant } = await supabaseAdmin
-        .from('pvp_participants')
-        .select('*')
-        .eq('match_id', matchId)
-        .eq('user_id', userId)
-        .single()
-
-      let participant = existingParticipant
-
-      // Only join if not already a participant
-      if (!existingParticipant) {
-        logger.info(`User ${userId} not in match yet, joining...`)
-        participant = await pvpService.joinMatch(matchId, userId)
-
-        // Notify all participants about new join
-        this.io.to(matchId).emit('participant:joined', participant)
-      } else {
-        logger.info(`User ${userId} already in match, just connecting socket`)
-
-        // Update connection status
-        await supabaseAdmin
-          .from('pvp_participants')
-          .update({ is_connected: true })
-          .eq('match_id', matchId)
-          .eq('user_id', userId)
+      if (socket.data.matchId && socket.data.matchId !== matchId) {
+        await this.handleMatchLeave(socket, socket.data.matchId)
+        if (socket.data.matchId) return
+      }
+      // Reconnects must pass the same ended/forfeited guards as REST joins.
+      const participant = await pvpService.joinMatch(matchId, userId)
+      if (socket.disconnected) {
+        socket.data.matchId = matchId
+        await this.handleDisconnect(socket)
+        socket.data.matchId = undefined
+        return
       }
 
       // Join socket room
-      socket.join(matchId)
+      await socket.join(matchId)
       socket.data.matchId = matchId
+      this.io.to(matchId).emit('participant:joined', participant)
 
       observability.trackPvPEvent('join', matchId, userId)
 
@@ -195,15 +273,45 @@ export class PvPSocketService {
           .eq('id', userId)
           .single()
 
-        this.io.to(matchId).emit('match:resumed', {
-          reconnectedUserId: userId,
-          displayName: reconProfile?.display_name || 'Người chơi',
-        })
-
         // If match was paused, unpause and restart the question timer
-        if (this.pausedMatches.has(matchId)) {
+        if (
+          this.pausedMatches.has(matchId) &&
+          match.participants.every(player => player.is_connected || player.left_at)
+        ) {
           this.pausedMatches.delete(matchId)
+          this.io.to(matchId).emit('match:resumed', {
+            reconnectedUserId: userId,
+            displayName: reconProfile?.display_name || 'Người chơi',
+          })
           await this.startQuestion(matchId)
+        }
+      }
+
+      // Restore the current round privately on reload/reconnect, without reopening its clock.
+      if (match.status === 'in_progress' && !this.pausedMatches.has(matchId)) {
+        const startedAt = this.questionStartTimes.get(matchId)
+        if (startedAt !== undefined) {
+          const question = await pvpService.getCurrentQuestion(matchId)
+          if (question.id !== match.question_ids[match.current_question_index]) return
+          const { data: submission, error: snapshotError } = await supabaseAdmin
+            .from('pvp_submissions')
+            .select(
+              'id,match_id,user_id,question_id,submission_type,is_correct,points_earned,time_taken,submission_rank,submitted_at'
+            )
+            .eq('match_id', matchId)
+            .eq('user_id', userId)
+            .eq('question_id', question.id)
+            .maybeSingle()
+          if (snapshotError) throw snapshotError
+          socket.emit('match:question_changed', {
+            match,
+            question,
+            submission: submission || undefined,
+            timeRemaining: Math.max(
+              0,
+              match.time_per_question - Math.floor((Date.now() - startedAt) / 1000)
+            ),
+          })
         }
       }
 
@@ -222,39 +330,13 @@ export class PvPSocketService {
     matchId: string
   ): Promise<void> {
     try {
-      const userId = socket.data.userId!
-
-      // Check match status
-      const { data: match } = await supabaseAdmin
-        .from('pvp_matches')
-        .select('status')
-        .eq('id', matchId)
-        .single()
-
-      if (match?.status === 'waiting' || match?.status === 'starting') {
-        // Delete participant entirely if match hasn't started
-        await supabaseAdmin
-          .from('pvp_participants')
-          .delete()
-          .eq('match_id', matchId)
-          .eq('user_id', userId)
-      } else {
-        // Mark as left if match is in progress
-        await supabaseAdmin
-          .from('pvp_participants')
-          .update({ is_connected: false, left_at: new Date().toISOString() })
-          .eq('match_id', matchId)
-          .eq('user_id', userId)
-      }
-
-      // Leave socket room
-      socket.leave(matchId)
+      const canonicalId = socket.data.matchId
+      if (!canonicalId) return
+      const match = await pvpService.getMatch(matchId)
+      if (match.id !== canonicalId) throw new Error('Bạn không thuộc phòng PvP này')
+      await socket.leave(canonicalId)
+      await this.handleDisconnect(socket)
       socket.data.matchId = undefined
-
-      // Notify other participants
-      this.io.to(matchId).emit('participant:left', { user_id: userId } as any)
-
-      logger.info(`User ${userId} left match ${matchId} (Status: ${match?.status})`)
     } catch (error: any) {
       logger.error('Error leaving match:', error)
       socket.emit('error', { message: error.message || 'Failed to leave match' })
@@ -274,7 +356,8 @@ export class PvPSocketService {
       logger.info(`User ${userId} marking ready in match ${matchId}`)
 
       // Mark ready in database
-      await pvpService.markReady(matchId, userId)
+      if (socket.data.matchId !== matchId) throw new Error('Bạn không thuộc phòng PvP này')
+      const started = await pvpService.markReady(matchId, userId)
 
       // Get participant data with profile
       const { data: participant } = await supabaseAdmin
@@ -306,17 +389,6 @@ export class PvPSocketService {
 
       // Notify all participants
       this.io.to(matchId).emit('participant:ready', participantWithProfile as any)
-
-      // Check if all ready and start match
-      const currentMatch = await pvpService.getMatch(matchId)
-      
-      // Prevent double start if already starting or in_progress
-      if (currentMatch.status === 'starting' || currentMatch.status === 'in_progress') {
-        logger.info(`Match ${matchId} already started, skipping handleMatchReady start`)
-        return
-      }
-
-      const started = await pvpService.checkAndStartMatch(matchId)
 
       if (started) {
         logger.info(`All players ready, starting match ${matchId}`)
@@ -361,13 +433,15 @@ export class PvPSocketService {
 
       const delayMs = match.time_per_question * 1000
 
-      // 1. Record start time
-      this.questionStartTimes.set(matchId, Date.now())
+      // Persist the phase using the database clock before showing the question.
+      const phase = await pvpService.setQuestionPhase(matchId, match.current_question_index, true)
+      if (!phase?.changed) return
+      this.questionStartTimes.set(matchId, Date.parse(phase.started_at))
 
       // 2. Schedule timer FIRST to ensure the match progresses even if emission fails
       await this.clearQuestionTimer(matchId)
-      const timer = setTimeout(async () => {
-        await this.endQuestion(matchId)
+      const timer = this.schedule(async () => {
+        await this.endQuestion(matchId, match.current_question_index)
       }, delayMs)
       this.matchTimers.set(matchId, timer)
 
@@ -378,29 +452,31 @@ export class PvPSocketService {
         timeRemaining: match.time_per_question,
       })
 
-      logger.info(`[startQuestion] Question ${match.current_question_index + 1} started for match ${matchId} (${delayMs}ms)`)
+      logger.info(
+        `[startQuestion] Question ${match.current_question_index + 1} started for match ${matchId} (${delayMs}ms)`
+      )
     } catch (error) {
       logger.error('Error starting question:', error)
+      this.io.to(matchId).emit('error', { message: 'Không thể mở câu hỏi. Vui lòng thử lại sau.' })
     }
   }
 
   /**
    * End current question and move to next or complete match
    */
-  private async endQuestion(matchId: string): Promise<void> {
+  private async endQuestion(matchId: string, expectedIndex?: number): Promise<void> {
     // Mutex guard: prevent double calls
-    if (this.endingQuestions.has(matchId)) {
-      logger.warn(`[endQuestion] Already ending question for match ${matchId}, skipping duplicate call`)
+    const phaseKey = `${matchId}:${expectedIndex ?? 'current'}`
+    if (this.endingQuestions.has(phaseKey)) {
+      logger.warn(
+        `[endQuestion] Already ending question for match ${matchId}, skipping duplicate call`
+      )
       return
     }
-    this.endingQuestions.add(matchId)
+    this.endingQuestions.add(phaseKey)
 
     try {
       logger.info(`[endQuestion] Starting for match ${matchId}`)
-
-      // Clear timer
-      await this.clearQuestionTimer(matchId)
-      this.questionStartTimes.delete(matchId)
 
       // Get match
       const { data: match, error: fetchError } = await supabaseAdmin
@@ -417,9 +493,17 @@ export class PvPSocketService {
 
       // Ensure match is still in progress or starting
       if (match.status !== 'in_progress' && match.status !== 'starting') {
-        logger.warn(`[endQuestion] Match ${matchId} is not in a state to end question: ${match.status}. Check if match was already completed or cancelled.`)
+        logger.warn(
+          `[endQuestion] Match ${matchId} is not in a state to end question: ${match.status}. Check if match was already completed or cancelled.`
+        )
         return
       }
+
+      if (expectedIndex !== undefined && match.current_question_index !== expectedIndex) return
+      const phase = await pvpService.setQuestionPhase(matchId, match.current_question_index, false)
+      if (!phase?.changed) return
+      await this.clearQuestionTimer(matchId)
+      this.questionStartTimes.delete(matchId)
 
       const nextIndex = match.current_question_index + 1
       logger.info(
@@ -440,16 +524,25 @@ export class PvPSocketService {
         })
 
         // Always use setTimeout for cooldown (3s is too short to need Redis persistence)
-        setTimeout(async () => {
+        this.schedule(async () => {
           try {
             logger.info(`[cooldown] Transitioning to question ${nextIndex} for match ${matchId}`)
-            await supabaseAdmin
+            const { data: advanced, error: advanceError } = await supabaseAdmin
               .from('pvp_matches')
               .update({ current_question_index: nextIndex })
               .eq('id', matchId)
+              .eq('current_question_index', match.current_question_index)
+              .eq('status', 'in_progress')
+              .select('id')
+              .maybeSingle()
+            if (advanceError) throw advanceError
+            if (!advanced) return
             await this.startQuestion(matchId)
           } catch (e) {
             logger.error('[cooldown] Error transitioning to next question:', e)
+            this.io
+              .to(matchId)
+              .emit('error', { message: 'Không thể chuyển câu hỏi. Vui lòng thử lại sau.' })
           }
         }, 3000)
       } else {
@@ -464,7 +557,7 @@ export class PvPSocketService {
         })
 
         // Always use setTimeout for final cooldown
-        setTimeout(async () => {
+        this.schedule(async () => {
           try {
             logger.info(`[cooldown] Completing match ${matchId}`)
             await this.completeMatch(matchId)
@@ -475,15 +568,18 @@ export class PvPSocketService {
       }
     } catch (error) {
       logger.error('[endQuestion] Error:', error)
-      // Attempt to ensure progress even on failure if match exists
       try {
-        this.io.to(matchId).emit('match:cooldown', { duration: 0, isMatchOver: true })
+        this.io
+          .to(matchId)
+          .emit('error', { message: 'Không thể lưu trạng thái vòng đấu. Vui lòng thử lại sau.' })
       } catch {
         // Ignore errors if socket channel is already destroyed
       }
     } finally {
       // Release mutex after a short delay to cover the cooldown scheduling
-      setTimeout(() => this.endingQuestions.delete(matchId), 1000)
+      this.schedule(() => {
+        this.endingQuestions.delete(phaseKey)
+      }, 1000)
     }
   }
 
@@ -503,264 +599,148 @@ export class PvPSocketService {
   /**
    * Complete a match and calculate final scores
    */
-  private async completeMatch(matchId: string): Promise<void> {
+  private async completeMatch(matchId: string, forfeitActor?: string): Promise<void> {
     try {
-      logger.info(`[completeMatch] Starting for match ${matchId}`)
-
-      // Get participants with scores (without join)
-      const { data: participants, error: participantsError } = await supabaseAdmin
-        .from('pvp_participants')
-        .select('*')
-        .eq('match_id', matchId)
-        .order('total_score', { ascending: false })
-
-      if (participantsError) {
-        logger.error(`[completeMatch] Error fetching participants:`, participantsError)
-        return
-      }
-
-      if (!participants || participants.length === 0) {
-        logger.error(`[completeMatch] No participants found for match ${matchId}`)
-        return
-      }
-
-      logger.info(`[completeMatch] Found ${participants.length} participants`)
-
-      // Get user profiles separately
-      const userIds = participants.map((p: any) => p.user_id)
-      const { data: profiles } = await supabaseAdmin
-        .from('user_profiles')
-        .select('id, display_name, avatar_url')
-        .in('id', userIds)
-
-      // Create profile map
-      const profileMap = new Map(profiles?.map(p => [p.id, p.display_name]) || [])
-
-      // Assign ranks (handle ties)
-      let currentRank = 1
-      let previousScore: number | null = null
-
-      const rankedParticipants = participants.map((p: any, index: number) => {
-        const score = p.total_score || 0
-        if (previousScore !== null && score < previousScore) {
-          currentRank = index + 1
-        }
-        previousScore = score
-
-        return {
-          userId: p.user_id,
-          displayName: profileMap.get(p.user_id) || 'Anonymous',
-          score,
-          rank: currentRank,
-        }
-      })
-
-      logger.info(`[completeMatch] Ranked participants:`, rankedParticipants)
-
-      // Check for draw (multiple users with rank 1)
-      const firstPlaceWinners = rankedParticipants.filter(p => p.rank === 1)
-      const isDraw = firstPlaceWinners.length > 1
-
-      // Update match status and winner (null if draw)
-      const { error: updateError } = await supabaseAdmin
-        .from('pvp_matches')
-        .update({
-          status: 'completed',
-          ended_at: new Date().toISOString(),
-          winner_id: isDraw ? null : firstPlaceWinners[0].userId,
-        })
-        .eq('id', matchId)
-
-      if (updateError) {
-        logger.error(`[completeMatch] Error updating match status:`, updateError)
-        return
-      }
-
-      logger.info(
-        `[completeMatch] Updated match status to completed, winner: ${isDraw ? 'DRAW' : firstPlaceWinners[0].userId}`
-      )
-
-      // Update participant ranks
-      for (const p of rankedParticipants) {
-        await supabaseAdmin
-          .from('pvp_participants')
-          .update({ final_rank: p.rank })
-          .eq('match_id', matchId)
-          .eq('user_id', p.userId)
-      }
-
-      logger.info(`[completeMatch] Updated participant ranks`)
-
-      // Get updated match
+      const outcome = await pvpService.finishMatch(matchId, forfeitActor)
+      if (!outcome.changed && !outcome.forfeited) return
       const match = await pvpService.getMatch(matchId)
-
-      logger.info(`[completeMatch] Emitting match:completed event to room ${matchId}`)
-
-      // Emit match completed event
-      this.io.to(matchId).emit('match:completed', {
-        match,
-        finalScores: rankedParticipants,
-      })
-
-      observability.trackPvPEvent('complete', matchId, undefined, { finalScores: rankedParticipants })
-
-      logger.info(`[completeMatch] Match ${matchId} completed successfully`)
+      if (outcome.forfeited) {
+        observability.trackPvPEvent('forfeit', matchId, forfeitActor)
+        this.io.to(matchId).emit('match:forfeit', {
+          forfeitUserId: forfeitActor!,
+          displayName:
+            match.participants.find(p => p.user_id === forfeitActor)?.display_name || 'Người chơi',
+          reason: 'disconnect_timeout',
+        })
+      }
+      if (!outcome.changed) {
+        if (match.participants.every(p => p.is_connected || p.left_at)) {
+          this.pausedMatches.delete(matchId)
+          this.io
+            .to(matchId)
+            .emit('match:resumed', { reconnectedUserId: forfeitActor!, displayName: 'Người chơi' })
+          await this.startQuestion(matchId)
+        }
+        this.io.to(matchId).emit('match:updated', { match })
+        return
+      }
+      await this.clearQuestionTimer(matchId)
+      this.questionStartTimes.delete(matchId)
+      this.pausedMatches.delete(matchId)
+      for (const [key, timer] of this.disconnectTimers) {
+        if (key.startsWith(matchId + ':')) {
+          clearTimeout(timer)
+          this.disconnectTimers.delete(key)
+        }
+      }
+      const finalScores = match.participants.map(p => ({
+        userId: p.user_id,
+        displayName: p.display_name || 'Anonymous',
+        score: p.total_score,
+        rank: p.final_rank || 1,
+      }))
+      this.io.to(matchId).emit('match:completed', { match, finalScores })
+      observability.trackPvPEvent('complete', matchId, undefined, { finalScores })
     } catch (error) {
-      logger.error('[completeMatch] Error:', error)
+      logger.error('Error completing match:', error)
+      this.io
+        .to(matchId)
+        .emit('error', { message: 'Không thể lưu kết quả trận đấu. Vui lòng thử lại sau.' })
     }
   }
 
   /**
    * Handle answer submission
    */
+  private async notifySubmission(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    submission: PvPSubmission,
+    answerFeedback: boolean
+  ): Promise<void> {
+    const {
+      id,
+      match_id,
+      user_id,
+      question_id,
+      submission_type,
+      is_correct,
+      points_earned,
+      time_taken,
+      submission_rank,
+      submitted_at,
+    } = submission
+    const safe = {
+      id,
+      match_id,
+      user_id,
+      question_id,
+      submission_type,
+      is_correct,
+      points_earned,
+      time_taken,
+      submission_rank,
+      submitted_at,
+    }
+    const ranked = {
+      userId: user_id,
+      questionId: question_id,
+      rank: submission_rank || 1,
+      pointsEarned: points_earned,
+    }
+    if (submission._replayed) {
+      // Acknowledge the sender again without rebroadcasting or scheduling another transition.
+      socket.emit('submission:received', safe)
+      socket.emit('submission:ranked', ranked)
+    } else {
+      this.io.to(match_id).emit('submission:received', safe)
+      this.io.to(match_id).emit('submission:ranked', ranked)
+    }
+    if (answerFeedback)
+      socket.emit('submission:feedback', {
+        questionId: question_id,
+        correctAnswerId: submission._correct_answer_id,
+      })
+    if (submission._replayed) return
+    const participantCount = submission._participant_count || 0
+    if (participantCount > 0 && (submission._submission_count || 0) >= participantCount) {
+      // Keep the deadline timer until endQuestion verifies the expected round.
+      // A delayed response from an old round must not clear the next round's timer.
+      this.schedule(() => this.endQuestion(match_id, submission._question_index), 2000)
+    }
+  }
+
   private async handleSubmitAnswer(
     socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
     payload: { matchId: string; questionId: string; answer: string; timeTaken?: number }
   ): Promise<void> {
     try {
-      const userId = socket.data.userId!
-
-      // Submit answer
       const submission = await pvpService.submitAnswer(
         payload.matchId,
-        userId,
+        socket.data.userId!,
         payload.questionId,
         payload.answer,
         payload.timeTaken || 0
       )
-
-      // Notify all participants (hide answer)
-      const sanitized = { ...submission, selected_answer: undefined, _correct_answer_id: undefined }
-      this.io.to(payload.matchId).emit('submission:received', sanitized)
-
-      // Calculate rank
-      const { data: submissions } = await supabaseAdmin
-        .from('pvp_submissions')
-        .select('*')
-        .eq('match_id', payload.matchId)
-        .eq('question_id', payload.questionId)
-        .order('submitted_at', { ascending: true })
-
-      const rank = (submissions ? submissions.findIndex((s: { user_id: string }) => s.user_id === userId) : -1) + 1 || 1
-
-      // Emit rank
-      this.io.to(payload.matchId).emit('submission:ranked', {
-        userId,
-        questionId: payload.questionId,
-        rank,
-        pointsEarned: submission.points_earned,
-      })
-
-      // Send the correct answer back ONLY to the submitter so they can see what they got wrong
-      socket.emit('submission:feedback', {
-        questionId: payload.questionId,
-        correctAnswerId: submission._correct_answer_id,
-      })
-
-      logger.info(`User ${userId} submitted answer for question ${payload.questionId}`)
-
-      // Check if all participants have submitted
-      const { data: participants } = await supabaseAdmin
-        .from('pvp_participants')
-        .select('user_id')
-        .eq('match_id', payload.matchId)
-
-      const participantCount = participants?.length || 0
-      const submissionCount = submissions?.length || 0
-
-      logger.info(
-        `Submissions: ${submissionCount}/${participantCount} for question ${payload.questionId}`
-      )
-
-      // If all participants submitted, end question immediately
-      if (submissionCount >= participantCount) {
-        logger.info(
-          `All participants submitted for question ${payload.questionId}, ending round...`
-        )
-
-        // Clear existing timer
-        await this.clearQuestionTimer(payload.matchId)
-
-        // End question after short delay (2 seconds to show results)
-        setTimeout(async () => {
-          await this.endQuestion(payload.matchId)
-        }, 2000)
-      }
+      await this.notifySubmission(socket, submission, true)
     } catch (error: any) {
       logger.error('Error submitting answer:', error)
       socket.emit('error', { message: error.message || 'Failed to submit answer' })
     }
   }
 
-  /**
-   * Handle code submission
-   */
   private async handleSubmitCode(
     socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
     payload: { matchId: string; questionId: string; code: string; timeTaken?: number }
   ): Promise<void> {
     try {
-      const userId = socket.data.userId!
-
       const submission = await pvpService.submitCode(
         payload.matchId,
-        userId,
+        socket.data.userId!,
         payload.questionId,
         payload.code,
         payload.timeTaken || 0
       )
-
-      // Notify all participants (hide code)
-      const sanitized = { ...submission, code: undefined }
-      this.io.to(payload.matchId).emit('submission:received', sanitized)
-
-      // Calculate rank
-      const { data: submissions } = await supabaseAdmin
-        .from('pvp_submissions')
-        .select('*')
-        .eq('match_id', payload.matchId)
-        .eq('question_id', payload.questionId)
-        .order('submitted_at', { ascending: true })
-
-      const rank = (submissions ? submissions.findIndex((s: { user_id: string }) => s.user_id === userId) : -1) + 1 || 1
-
-      // Emit rank
-      this.io.to(payload.matchId).emit('submission:ranked', {
-        userId,
-        questionId: payload.questionId,
-        rank,
-        pointsEarned: submission.points_earned,
-      })
-
-      logger.info(`User ${userId} submitted code for question ${payload.questionId}`)
-
-      // Check if all participants have submitted
-      const { data: participants } = await supabaseAdmin
-        .from('pvp_participants')
-        .select('user_id')
-        .eq('match_id', payload.matchId)
-
-      const participantCount = participants?.length || 0
-      const submissionCount = submissions?.length || 0
-
-      logger.info(
-        `Code submissions: ${submissionCount}/${participantCount} for question ${payload.questionId}`
-      )
-
-      // If all participants submitted, end question immediately
-      if (submissionCount >= participantCount) {
-        logger.info(
-          `All participants submitted code for question ${payload.questionId}, ending round...`
-        )
-
-        // Clear existing timer
-        await this.clearQuestionTimer(payload.matchId)
-
-        // End question after short delay (2 seconds to show results)
-        setTimeout(async () => {
-          await this.endQuestion(payload.matchId)
-        }, 2000)
-      }
+      await this.notifySubmission(socket, submission, false)
     } catch (error: any) {
       logger.error('Error submitting code:', error)
       socket.emit('error', { message: error.message || 'Failed to submit code' })
@@ -776,6 +756,11 @@ export class PvPSocketService {
   ): Promise<void> {
     try {
       const userId = socket.data.userId!
+      await this.assertParticipant(payload.matchId, userId)
+
+      if (payload.targetUserId) {
+        await this.assertParticipant(payload.matchId, payload.targetUserId)
+      }
 
       // Save reaction
       const { data: reaction, error: reactionError } = await supabaseAdmin
@@ -820,6 +805,7 @@ export class PvPSocketService {
     matchId: string
   ): Promise<void> {
     const userId = socket.data.userId!
+    await this.assertParticipant(matchId, userId)
 
     // Get user info
     const { data: profile } = await supabaseAdmin
@@ -838,14 +824,28 @@ export class PvPSocketService {
   /**
    * Handle typing stop
    */
-  private handleTypingStop(
+  private async handleTypingStop(
     socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
     matchId: string
-  ): void {
+  ): Promise<void> {
     const userId = socket.data.userId!
+    await this.assertParticipant(matchId, userId)
 
     // Broadcast to others in match
     socket.to(matchId).emit('typing:user_stopped', { userId })
+  }
+
+  private async assertParticipant(matchId: string, userId: string): Promise<void> {
+    const { data, error } = await supabaseAdmin
+      .from('pvp_participants')
+      .select('user_id')
+      .eq('match_id', matchId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error || !data) {
+      throw new Error('Bạn không thuộc phòng PvP này')
+    }
   }
 
   /**
@@ -855,6 +855,7 @@ export class PvPSocketService {
   private async handleDisconnect(
     socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>
   ): Promise<void> {
+    if (this.stopping) return
     const userId = socket.data.userId
     const matchId = socket.data.matchId
 
@@ -864,38 +865,17 @@ export class PvPSocketService {
 
     observability.trackPvPEvent('disconnect', matchId, userId)
 
-    // Update participant status
-    await supabaseAdmin
-      .from('pvp_participants')
-      .update({ is_connected: false })
-      .eq('match_id', matchId)
-      .eq('user_id', userId)
-
-    // Notify other participants
+    // A second tab still in this room keeps the participant connected.
+    const peers = await this.io.in(matchId).fetchSockets()
+    if (peers.some(peer => peer.id !== socket.id && peer.data.userId === userId)) return
+    const outcome = await pvpService.disconnectMatch(matchId, userId)
+    if (!outcome.changed) return
     this.io.to(matchId).emit('participant:disconnected', userId)
-
-    // Check match status
-    const { data: match } = await supabaseAdmin
-      .from('pvp_matches')
-      .select('status')
-      .eq('id', matchId)
-      .single()
-
-    // If the match is still in waiting, delete the participant record
-    // so someone else can join the lobby.
-    if (match?.status === 'waiting') {
-      await supabaseAdmin
-        .from('pvp_participants')
-        .delete()
-        .eq('match_id', matchId)
-        .eq('user_id', userId)
-      
+    if (outcome.status === 'waiting') {
       this.io.to(matchId).emit('participant:left', { user_id: userId } as any)
-      logger.info(`User ${userId} disconnected from lobby ${matchId} — removed participant`)
       return
     }
-
-    if (!match || match.status !== 'in_progress') return
+    if (outcome.status !== 'in_progress') return
 
     // --- PAUSE the match ---
     logger.info(`[Disconnect Grace] Pausing match ${matchId} — waiting 30s for user ${userId}`)
@@ -922,7 +902,7 @@ export class PvPSocketService {
 
     // Start 30s grace timer
     const timerKey = `${matchId}:${userId}`
-    const graceTimer = setTimeout(async () => {
+    const graceTimer = this.schedule(async () => {
       this.disconnectTimers.delete(timerKey)
 
       // Check if user reconnected in the meantime
@@ -938,28 +918,8 @@ export class PvPSocketService {
         return
       }
 
-      // --- FORFEIT ---
-      logger.info(`[Disconnect Grace] User ${userId} did not reconnect — auto-forfeit`)
-      observability.trackPvPEvent('forfeit', matchId, userId)
-
-      this.pausedMatches.delete(matchId)
-
-      // Notify all clients
-      this.io.to(matchId).emit('match:forfeit', {
-        forfeitUserId: userId,
-        displayName,
-        reason: 'disconnect_timeout',
-      })
-
-      // Set this user's score to 0 and complete the match with the other player winning
-      await supabaseAdmin
-        .from('pvp_participants')
-        .update({ total_score: 0, final_rank: 99 })
-        .eq('match_id', matchId)
-        .eq('user_id', userId)
-
-      // Complete the match
-      await this.completeMatch(matchId)
+      // Recheck connection and commit ranks/status/stats together before notifying players.
+      await this.completeMatch(matchId, userId)
     }, PvPSocketService.DISCONNECT_GRACE_SECONDS * 1000)
 
     this.disconnectTimers.set(timerKey, graceTimer)

@@ -1,11 +1,20 @@
+import { cmsTransferSchema, createCmsItem, updateCmsItem } from './cms.schemas'
 import { z } from 'zod'
+import {
+  answerKeySchema,
+  lessonStepTypeSchema,
+  lessonTypeSchema,
+  validationTypeSchema,
+} from './lesson-values'
 
 /**
  * Supported language codes for multilingual content
  */
 const supportedLanguageSchema = z.enum(['vi', 'en'], {
-  errorMap: () => ({ message: 'Ngôn ngữ phải là vi hoặc en' }),
+  error: () => 'Ngôn ngữ phải là vi hoặc en',
 })
+
+const codeLessonTypes = new Set(['code_fix', 'code_build'])
 
 export const contentSchemas = {
   // Language parameter validation (for query strings)
@@ -41,12 +50,12 @@ export const contentSchemas = {
   // Documentation Link schemas (with multilingual support)
   documentationLink: z.object({
     body: z.object({
-      technologyId: z.string().uuid('ID công nghệ không hợp lệ'),
+      technologyId: z.guid('ID công nghệ không hợp lệ'),
       title: z.string().min(1, 'Tiêu đề tiếng Việt không được để trống'),
       title_en: z.string().optional(),
       url: z.string().url('URL không hợp lệ'),
       type: z.enum(['docs', 'video', 'article'], {
-        errorMap: () => ({ message: 'Loại phải là docs, video hoặc article' }),
+        error: () => 'Loại phải là docs, video hoặc article',
       }),
       description: z.string().optional(),
       description_en: z.string().optional(),
@@ -60,7 +69,7 @@ export const contentSchemas = {
       url: z.string().url('URL không hợp lệ').optional(),
       type: z
         .enum(['docs', 'video', 'article'], {
-          errorMap: () => ({ message: 'Loại phải là docs, video hoặc article' }),
+          error: () => 'Loại phải là docs, video hoặc article',
         })
         .optional(),
       description: z.string().optional(),
@@ -180,7 +189,7 @@ export const contentSchemas = {
   navigationItem: z.object({
     body: z.object({
       location: z.enum(['header', 'footer'], {
-        errorMap: () => ({ message: 'Vị trí phải là header hoặc footer' }),
+        error: () => 'Vị trí phải là header hoặc footer',
       }),
       path: z
         .string()
@@ -188,7 +197,7 @@ export const contentSchemas = {
         .startsWith('/', 'Đường dẫn phải bắt đầu bằng /'),
       label: z.string().min(1, 'Nhãn tiếng Việt không được để trống'),
       label_en: z.string().optional(),
-      parent_id: z.string().uuid('ID cha không hợp lệ').nullable().optional(),
+      parent_id: z.guid('ID cha không hợp lệ').nullable().optional(),
       icon: z.string().optional(),
       status: z.enum(['draft', 'published']).optional(),
     }),
@@ -198,7 +207,7 @@ export const contentSchemas = {
     body: z.object({
       location: z
         .enum(['header', 'footer'], {
-          errorMap: () => ({ message: 'Vị trí phải là header hoặc footer' }),
+          error: () => 'Vị trí phải là header hoặc footer',
         })
         .optional(),
       path: z
@@ -208,7 +217,7 @@ export const contentSchemas = {
         .optional(),
       label: z.string().min(1, 'Nhãn tiếng Việt không được để trống').optional(),
       label_en: z.string().optional(),
-      parent_id: z.string().uuid('ID cha không hợp lệ').nullable().optional(),
+      parent_id: z.guid('ID cha không hợp lệ').nullable().optional(),
       icon: z.string().optional(),
       status: z.enum(['draft', 'published']).optional(),
     }),
@@ -225,7 +234,7 @@ export const contentSchemas = {
   statusUpdate: z.object({
     body: z.object({
       status: z.enum(['draft', 'published'], {
-        errorMap: () => ({ message: 'Trạng thái phải là draft hoặc published' }),
+        error: () => 'Trạng thái phải là draft hoặc published',
       }),
     }),
   }),
@@ -235,7 +244,7 @@ export const contentSchemas = {
     query: z.object({
       location: z
         .enum(['header', 'footer'], {
-          errorMap: () => ({ message: 'Vị trí phải là header hoặc footer' }),
+          error: () => 'Vị trí phải là header hoặc footer',
         })
         .optional(),
     }),
@@ -243,7 +252,7 @@ export const contentSchemas = {
 
   auditLogsQuery: z.object({
     query: z.object({
-      userId: z.string().uuid('ID người dùng không hợp lệ').optional(),
+      userId: z.guid('ID người dùng không hợp lệ').optional(),
       resourceType: z.string().optional(),
       startDate: z.string().datetime('Ngày bắt đầu không hợp lệ').optional(),
       endDate: z.string().datetime('Ngày kết thúc không hợp lệ').optional(),
@@ -253,127 +262,193 @@ export const contentSchemas = {
   }),
 
   // Schema validation for creating/updating lessons
-  lesson: z.object({
+  lessonParams: z.object({
+    params: z.object({
+      lessonId: z.guid('ID bài học phải là UUID hợp lệ'),
+    }),
+  }),
+
+  testCaseParams: z.object({
+    params: z.object({
+      testCaseId: z.guid('ID test case phải là UUID hợp lệ'),
+    }),
+  }),
+
+  lessonStepParams: z.object({
+    params: z.object({
+      stepId: z.guid('ID lesson step phải là UUID hợp lệ'),
+    }),
+  }),
+
+  lessonTestCase: z.object({
+    params: z.object({
+      lessonId: z.guid('ID bài học phải là UUID hợp lệ'),
+    }),
     body: z.object({
-      id: z.string().uuid('ID bài học phải là UUID hợp lệ').optional(),
-      chapter_id: z.string().uuid('Chapter ID phải là UUID hợp lệ'),
-      lesson_id: z.string().min(1, 'Lesson ID không được để trống'),
-      title: z.string().min(1, 'Tiêu đề không được để trống'),
-      description: z.string().optional().default(''),
-      starter_code: z.string().min(1, 'Starter code không được để trống'),
-      task_description: z.string().optional().default(''),
-      hint: z.string().optional().default(''),
-      hint_level_1: z.string().optional().default(''),
-      hint_level_2: z.string().optional().default(''),
-      hint_level_3: z.string().optional().default(''),
-      common_mistakes: z.string().optional().default(''),
-      solution_code: z.string().min(1, 'Solution code không được để trống'),
-      is_aha_lesson: z.boolean().optional().default(false),
-      difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
-      grading_mode: z.enum(['stdout', 'function']).default('stdout'),
+      id: z.guid('ID test case phải là UUID hợp lệ').optional(),
+      description: z.string().trim().min(1, 'Mô tả test case không được để trống').max(500),
+      input: z.any().optional(),
+      expected_output: z.any(),
+      weight: z.number().int().min(1).max(100).optional(),
+      timeout: z.number().int().min(1).max(60000).optional(),
+      is_hidden: z.boolean().optional(),
       order_index: z.number().int().nonnegative(),
-      status: z.enum(['draft', 'published', 'archived']).default('draft'),
-      qa_checklist: z.array(z.object({
-        id: z.string(),
-        label: z.string(),
-        checked: z.boolean(),
-        order: z.number(),
-      })).optional().default([]),
-      debug_starter_code: z.string().optional().default(''),
-      debug_task_description: z.string().optional().default(''),
-      debug_validation_rules: z.array(z.object({
-        type: z.enum(['rule', 'exact', 'regex', 'stdout']),
-        value: z.string(),
-        description: z.string().optional(),
-      })).optional().default([]),
-      debug_hint: z.string().optional().default(''),
-    }).strict(),
+    }),
+  }),
+
+  lessonStep: z.object({
+    params: z.object({
+      lessonId: z.guid('ID bài học phải là UUID hợp lệ'),
+    }),
+    body: z.object({
+      id: z.guid('ID lesson step phải là UUID hợp lệ').optional(),
+      type: lessonStepTypeSchema,
+      title: z.string().max(200).optional(),
+      prompt: z.string().trim().min(1, 'Prompt không được để trống').max(5000),
+      options: z.array(z.any()).max(20).optional(),
+      correct_answer: answerKeySchema.optional(),
+      explanation: z.string().max(5000).optional(),
+      hint: z.string().max(2000).optional(),
+      is_required: z.boolean().optional(),
+      order_index: z.number().int().nonnegative(),
+    }),
+  }),
+
+  lesson: z.object({
+    body: z
+      .object({
+        id: z.guid('ID bài học phải là UUID hợp lệ').optional(),
+        chapter_id: z.guid('Chapter ID phải là UUID hợp lệ'),
+        lesson_id: z.string().min(1, 'Lesson ID không được để trống'),
+        title: z.string().min(1, 'Tiêu đề không được để trống'),
+        lesson_type: lessonTypeSchema.default('code_fix'),
+        description: z.string().optional().default(''),
+        starter_code: z.string().optional().default(''),
+        task_description: z.string().optional().default(''),
+        hint: z.string().optional().default(''),
+        hint_level_1: z.string().optional().default(''),
+        hint_level_2: z.string().optional().default(''),
+        hint_level_3: z.string().optional().default(''),
+        common_mistakes: z.string().optional().default(''),
+        solution_code: z.string().optional().default(''),
+        is_aha_lesson: z.boolean().optional().default(false),
+        difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
+        grading_mode: z.enum(['stdout', 'function']).default('stdout'),
+        validation_type: validationTypeSchema.default('rule'),
+        validation_rules: z.record(z.string(), z.any()).optional().default({}),
+        success_output: z.string().optional().default(''),
+        failure_hint: z.string().optional().default(''),
+        order_index: z.number().int().nonnegative(),
+        status: z.enum(['draft', 'published', 'archived']).default('draft'),
+        qa_checklist: z
+          .array(
+            z.object({
+              id: z.string(),
+              label: z.string(),
+              checked: z.boolean(),
+              order: z.number(),
+            })
+          )
+          .optional()
+          .default([]),
+        debug_starter_code: z.string().optional().default(''),
+        debug_task_description: z.string().optional().default(''),
+        debug_validation_rules: z
+          .array(
+            z.object({
+              type: z.enum(['rule', 'exact', 'regex', 'stdout']),
+              value: z.string(),
+              description: z.string().optional(),
+            })
+          )
+          .optional()
+          .default([]),
+        debug_hint: z.string().optional().default(''),
+      })
+      .strict()
+      .superRefine((body, ctx) => {
+        if (!codeLessonTypes.has(body.lesson_type)) return
+
+        if (!body.starter_code.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['starter_code'],
+            message: 'Starter code không được để trống với code lesson',
+          })
+        }
+
+        if (!body.solution_code.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['solution_code'],
+            message: 'Solution code không được để trống với code lesson',
+          })
+        }
+      }),
   }),
 
   // CMS Content Management Schemas
 
   // ContentCategorySchema - Represents a content category
   contentCategory: z.object({
-    id: z.string().uuid('ID danh mục phải là UUID hợp lệ'),
+    id: z.guid('ID danh mục phải là UUID hợp lệ'),
     name: z.string().min(1, 'Tên danh mục không được để trống'),
     description: z.string().optional(),
-    displayOrder: z.number().int('Thứ tự hiển thị phải là số nguyên').nonnegative('Thứ tự không được âm'),
+    displayOrder: z
+      .number()
+      .int('Thứ tự hiển thị phải là số nguyên')
+      .nonnegative('Thứ tự không được âm'),
     createdAt: z.date(),
     updatedAt: z.date(),
   }),
 
   // ContentItemSchema - Represents a content item
   contentItem: z.object({
-    id: z.string().uuid('ID nội dung phải là UUID hợp lệ'),
-    categoryId: z.string().uuid('ID danh mục phải là UUID hợp lệ'),
+    id: z.guid('ID nội dung phải là UUID hợp lệ'),
+    categoryId: z.guid('ID danh mục phải là UUID hợp lệ'),
     key: z.string().min(1, 'Key không được để trống').max(255, 'Key không được vượt quá 255 ký tự'),
     language: z.enum(['vi', 'en'], {
-      errorMap: () => ({ message: 'Ngôn ngữ phải là vi hoặc en' }),
+      error: () => 'Ngôn ngữ phải là vi hoặc en',
     }),
-    value: z.string().min(1, 'Nội dung không được để trống').max(5000, 'Nội dung không được vượt quá 5000 ký tự'),
+    value: z
+      .string()
+      .min(1, 'Nội dung không được để trống')
+      .max(5000, 'Nội dung không được vượt quá 5000 ký tự'),
     description: z.string().optional(),
-    type: z.enum(['text', 'markdown', 'html'], {
-      errorMap: () => ({ message: 'Loại nội dung phải là text, markdown hoặc html' }),
-    }).default('text'),
+    type: z
+      .enum(['text', 'markdown', 'html'], {
+        error: () => 'Loại nội dung phải là text, markdown hoặc html',
+      })
+      .default('text'),
     createdAt: z.date(),
     updatedAt: z.date(),
-    createdBy: z.string().uuid('ID người tạo phải là UUID hợp lệ').optional(),
-    updatedBy: z.string().uuid('ID người cập nhật phải là UUID hợp lệ').optional(),
+    createdBy: z.guid('ID người tạo phải là UUID hợp lệ').optional(),
+    updatedBy: z.guid('ID người cập nhật phải là UUID hợp lệ').optional(),
   }),
 
-  // CreateContentItemSchema - For creating new content items
-  createContentItem: z.object({
-    body: z.object({
-      categoryId: z.string().uuid('ID danh mục phải là UUID hợp lệ'),
-      key: z.string().min(1, 'Key không được để trống').max(255, 'Key không được vượt quá 255 ký tự'),
-      language: z.enum(['vi', 'en'], {
-        errorMap: () => ({ message: 'Ngôn ngữ phải là vi hoặc en' }),
-      }),
-      value: z.string().min(1, 'Nội dung không được để trống').max(5000, 'Nội dung không được vượt quá 5000 ký tự'),
-      description: z.string().optional(),
-      type: z.enum(['text', 'markdown', 'html'], {
-        errorMap: () => ({ message: 'Loại nội dung phải là text, markdown hoặc html' }),
-      }).default('text'),
+  createContentItem: z.object({ body: createCmsItem }),
+  updateContentItem: z.object({ params: z.object({ id: z.guid() }), body: updateCmsItem }),
+
+  cmsReadItemParams: z.object({ params: z.object({ id: z.guid() }) }),
+  contentItemParams: z.object({
+    params: z.object({ id: z.guid() }),
+    query: z.object({
+      revision: z
+        .string()
+        .regex(/^\d+$/)
+        .transform(Number)
+        .pipe(z.number().int().nonnegative().safe()),
     }),
   }),
 
-  // UpdateContentItemSchema - For updating content items
-  updateContentItem: z.object({
-    body: z.object({
-      value: z.string().min(1, 'Nội dung không được để trống').max(5000, 'Nội dung không được vượt quá 5000 ký tự'),
-      description: z.string().optional(),
-      type: z.enum(['text', 'markdown', 'html'], {
-        errorMap: () => ({ message: 'Loại nội dung phải là text, markdown hoặc html' }),
-      }).optional(),
-    }),
-  }),
-
-  // ImportContentSchema - For importing content from JSON
-  importContent: z.object({
-    body: z.object({
-      version: z.string().min(1, 'Phiên bản không được để trống'),
-      language: z.enum(['vi', 'en'], {
-        errorMap: () => ({ message: 'Ngôn ngữ phải là vi hoặc en' }),
-      }),
-      categories: z.record(
-        z.string(),
-        z.record(
-          z.string(),
-          z.string().min(1, 'Giá trị nội dung không được để trống').max(5000, 'Nội dung không được vượt quá 5000 ký tự')
-        ),
-        {
-          errorMap: () => ({ message: 'Cấu trúc categories không hợp lệ' }),
-        }
-      ),
-    }),
-  }),
+  importContent: z.object({ body: cmsTransferSchema }),
 
   // Query schemas for content endpoints
   contentQuery: z.object({
     query: z.object({
       category: z.string().optional(),
       language: z.enum(['vi', 'en']).optional(),
-      search: z.string().optional(),
+      search: z.string().trim().max(200).optional(),
       limit: z.string().transform(Number).pipe(z.number().int().positive().max(100)).optional(),
       offset: z.string().transform(Number).pipe(z.number().int().nonnegative()).optional(),
     }),
@@ -383,7 +458,7 @@ export const contentSchemas = {
   exportContentQuery: z.object({
     query: z.object({
       language: z.enum(['vi', 'en'], {
-        errorMap: () => ({ message: 'Ngôn ngữ phải là vi hoặc en' }),
+        error: () => 'Ngôn ngữ phải là vi hoặc en',
       }),
     }),
   }),

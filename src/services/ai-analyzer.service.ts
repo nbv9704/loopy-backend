@@ -11,6 +11,7 @@ import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'
 import { gradingCacheService, GradingCacheService } from './grading-cache.service'
 import { groqAnalyzerService, GroqAnalyzerService } from './groq-analyzer.service'
 import { buildGradingPrompt, buildHintPrompt, MODE_MAX_TOKENS } from './ai-prompt-builder'
+import { confirmAIHint } from './ai-hint-response'
 import { parseAIResponse } from './ai-response-parser'
 import { supabaseAdmin } from '../db/supabase'
 import { logger } from '../utils/logger'
@@ -102,12 +103,20 @@ export class AIAnalyzerService {
   async analyzeCode(params: AIAnalysisParams): Promise<AIAnalysis> {
     this.resetDailyCountersIfNeeded()
 
-    // Cache key includes starterCode hash for correct per-context caching
     const depth = params.gradingDepth || 'quick'
+    const prompt = buildGradingPrompt(params)
+    // Include every prompt input and the full source; old context must never reuse a grade.
     const cacheKey = this.cache.generateCacheKey(
-      `${params.code}|${params.starterCode || ''}`,
+      JSON.stringify([
+        params.code,
+        params.starterCode ?? '',
+        params.exerciseQuestion,
+        params.lessonInsight ?? '',
+        params.expectedSolution ?? '',
+        prompt,
+      ]),
       params.exerciseTitle,
-      `${params.language}:${depth}`
+      `${params.language}:${depth}:prompt-v2`
     )
     const cached = await this.cache.get(cacheKey)
     if (cached) {
@@ -115,9 +124,6 @@ export class AIAnalyzerService {
       await this.logUsage(null, 0, 0, 0, true)
       return cached as AIAnalysis
     }
-
-    // Build prompt once (reused by both Groq and Gemini paths)
-    const prompt = buildGradingPrompt(params)
 
     // Try Groq first (Primary — cascading: 8B → Scout 17B → Qwen 32B → 70B)
     if (this.groq.canAnalyze(depth)) {
@@ -257,7 +263,7 @@ export class AIAnalyzerService {
     if (this.groq.canAnalyze('quick')) {
       try {
         const result = await this.groq.generateHint(params)
-        return result
+        return confirmAIHint(result)
       } catch (groqError: any) {
         logger.warn('Groq hint failed, falling back to Gemini', { error: groqError.message })
       }
@@ -283,24 +289,8 @@ export class AIAnalyzerService {
 
     try {
       const text = await this.callWithRetry(this.model, requestPayload, 1)
-      let parsed: { hint?: string } = {}
-      
-      try {
-        let jsonStr = text.trim()
-        const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
-        if (jsonMatch) jsonStr = jsonMatch[1].trim()
-        parsed = JSON.parse(jsonStr)
-      } catch (parseError) {
-        logger.warn('Failed to parse AI hint JSON, attempting recovery', { text: text.substring(0, 100) })
-        const hintMatch = text.match(/"hint"\s*:\s*"([^"]+)"/)
-        if (hintMatch) {
-          parsed = { hint: hintMatch[1] }
-        } else {
-          parsed = { hint: 'AI đang gặp khó khăn khi phân tích chi tiết. Bạn hãy thử rà soát lại các dấu ngoặc, lỗi chính tả hoặc dấu chấm phẩy nhé!' }
-        }
-      }
-      
-      return { hint: parsed.hint || 'Hãy kiểm tra lại đoạn code xem có lỗi cú pháp không nhé.' }
+      const jsonMatch = text.trim().match(/```(?:json)?\s*([\s\S]*?)```/)
+      return confirmAIHint(JSON.parse(jsonMatch ? jsonMatch[1].trim() : text.trim()))
     } catch (error: any) {
       logger.error('Gemini hint failed', { error: error.message })
       throw error

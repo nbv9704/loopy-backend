@@ -1,6 +1,8 @@
+-- Legacy seed, development only. Prefer reviewed JSON import; never replay on authored production data.
 -- Ensure CMS categories used by migrated frontend keys exist.
 INSERT INTO content_categories (name, description, display_order) VALUES
-  ('header', 'Header navigation content', 1),
+  ('nav', 'Shared navigation content', 1),
+  ('header', 'Legacy header category', 1),
   ('footer', 'Footer content', 2),
   ('landing', 'Landing page content', 3),
   ('languages', 'Languages page content', 4),
@@ -74,25 +76,25 @@ SELECT c.id, 'auth.title.signup2', 'vi', 'Tạo tài khoản Loopy', 'text' FROM
 UNION ALL
 SELECT c.id, 'auth.title.signup2', 'en', 'Create your Loopy account', 'text' FROM categories c WHERE c.name = 'auth'
 UNION ALL
-SELECT c.id, 'bottom.btn', 'vi', 'Tìm lộ trình phù hợp', 'text' FROM categories c WHERE c.name = 'bottom'
+SELECT c.id, 'bottom.btn', 'vi', 'Tìm lộ trình phù hợp', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'bottom.btn', 'en', 'Find the right path', 'text' FROM categories c WHERE c.name = 'bottom'
+SELECT c.id, 'bottom.btn', 'en', 'Find the right path', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'bottom.desc', 'vi', 'Chọn mục tiêu học, mở bài đầu tiên và để Loopy dẫn bạn qua từng bước thực hành.', 'text' FROM categories c WHERE c.name = 'bottom'
+SELECT c.id, 'bottom.desc', 'vi', 'Chọn mục tiêu học, mở bài đầu tiên và để Loopy dẫn bạn qua từng bước thực hành.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'bottom.desc', 'en', 'Choose a learning goal, open the first lesson, and let Loopy guide you through each practice step.', 'text' FROM categories c WHERE c.name = 'bottom'
+SELECT c.id, 'bottom.desc', 'en', 'Choose a learning goal, open the first lesson, and let Loopy guide you through each practice step.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'bottom.title', 'vi', 'Bắt đầu bằng một bài nhỏ.', 'text' FROM categories c WHERE c.name = 'bottom'
+SELECT c.id, 'bottom.title', 'vi', 'Bắt đầu bằng một bài nhỏ.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'bottom.title', 'en', 'Start with one small lesson.', 'text' FROM categories c WHERE c.name = 'bottom'
+SELECT c.id, 'bottom.title', 'en', 'Start with one small lesson.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'cta.primary', 'vi', 'Thử bài đầu tiên', 'text' FROM categories c WHERE c.name = 'cta'
+SELECT c.id, 'cta.primary', 'vi', 'Thử bài đầu tiên', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'cta.primary', 'en', 'Try the first lesson', 'text' FROM categories c WHERE c.name = 'cta'
+SELECT c.id, 'cta.primary', 'en', 'Try the first lesson', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'cta.secondary', 'vi', 'Xem lộ trình', 'text' FROM categories c WHERE c.name = 'cta'
+SELECT c.id, 'cta.secondary', 'vi', 'Xem lộ trình', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'cta.secondary', 'en', 'View the journey', 'text' FROM categories c WHERE c.name = 'cta'
+SELECT c.id, 'cta.secondary', 'en', 'View the journey', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
 SELECT c.id, 'detail.back_btn', 'vi', 'Quay lại các lộ trình', 'text' FROM categories c WHERE c.name = 'detail'
 UNION ALL
@@ -330,37 +332,37 @@ SELECT c.id, 'errorBoundary.stackTrace', 'vi', 'Stack Trace', 'text' FROM catego
 UNION ALL
 SELECT c.id, 'errorBoundary.stackTrace', 'en', 'Stack Trace', 'text' FROM categories c WHERE c.name = 'errorBoundary'
 UNION ALL
-SELECT c.id, 'faq.badge', 'vi', 'FAQ', 'text' FROM categories c WHERE c.name = 'faq'
+SELECT c.id, 'faq.badge', 'vi', 'FAQ', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq.badge', 'en', 'FAQ', 'text' FROM categories c WHERE c.name = 'faq'
+SELECT c.id, 'faq.badge', 'en', 'FAQ', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq.title', 'vi', 'Loopy giúp người mới học thế nào?', 'text' FROM categories c WHERE c.name = 'faq'
+SELECT c.id, 'faq.title', 'vi', 'Loopy giúp người mới học thế nào?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq.title', 'en', 'How does Loopy help beginners learn?', 'text' FROM categories c WHERE c.name = 'faq'
+SELECT c.id, 'faq.title', 'en', 'How does Loopy help beginners learn?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq1.a', 'vi', 'Tài liệu để tra cứu. Loopy đưa bạn vào một lộ trình có bài tiếp theo, editor, terminal, kiểm tra tự động và lưu tiến độ.', 'text' FROM categories c WHERE c.name = 'faq1'
+SELECT c.id, 'faq1.a', 'vi', 'Tài liệu để tra cứu. Loopy đưa bạn vào một lộ trình có bài tiếp theo, editor, terminal, kiểm tra tự động và lưu tiến độ.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq1.a', 'en', 'Docs are for reference. Loopy gives you a guided path with the next lesson, an editor, a terminal, automatic checks, and saved progress.', 'text' FROM categories c WHERE c.name = 'faq1'
+SELECT c.id, 'faq1.a', 'en', 'Docs are for reference. Loopy gives you a guided path with the next lesson, an editor, a terminal, automatic checks, and saved progress.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq1.q', 'vi', 'Loopy khác một trang tài liệu ở điểm nào?', 'text' FROM categories c WHERE c.name = 'faq1'
+SELECT c.id, 'faq1.q', 'vi', 'Loopy khác một trang tài liệu ở điểm nào?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq1.q', 'en', 'How is Loopy different from documentation?', 'text' FROM categories c WHERE c.name = 'faq1'
+SELECT c.id, 'faq1.q', 'en', 'How is Loopy different from documentation?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq2.a', 'vi', 'Không. Chạy thử chỉ execute code để xem output. Kiểm tra mới dùng rule/test case để quyết định bài làm đã đạt yêu cầu chưa.', 'text' FROM categories c WHERE c.name = 'faq2'
+SELECT c.id, 'faq2.a', 'vi', 'Không. Chạy thử chỉ execute code để xem output. Kiểm tra mới dùng rule/test case để quyết định bài làm đã đạt yêu cầu chưa.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq2.a', 'en', 'No. Run only executes your code so you can inspect the output. Check uses rules or test cases to decide whether the lesson requirement is met.', 'text' FROM categories c WHERE c.name = 'faq2'
+SELECT c.id, 'faq2.a', 'en', 'No. Run only executes your code so you can inspect the output. Check uses rules or test cases to decide whether the lesson requirement is met.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq2.q', 'vi', 'Chạy thử và Kiểm tra có giống nhau không?', 'text' FROM categories c WHERE c.name = 'faq2'
+SELECT c.id, 'faq2.q', 'vi', 'Chạy thử và Kiểm tra có giống nhau không?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq2.q', 'en', 'Are Run and Check the same thing?', 'text' FROM categories c WHERE c.name = 'faq2'
+SELECT c.id, 'faq2.q', 'en', 'Are Run and Check the same thing?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq3.a', 'vi', 'Có. Các bài đầu được thiết kế nhỏ, có ví dụ mẫu và yêu cầu cụ thể để bạn làm từng bước thay vì tự mò trong IDE.', 'text' FROM categories c WHERE c.name = 'faq3'
+SELECT c.id, 'faq3.a', 'vi', 'Có. Các bài đầu được thiết kế nhỏ, có ví dụ mẫu và yêu cầu cụ thể để bạn làm từng bước thay vì tự mò trong IDE.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq3.a', 'en', 'Yes. Early lessons are intentionally small, with examples and concrete requirements so you can move step by step instead of guessing inside an IDE.', 'text' FROM categories c WHERE c.name = 'faq3'
+SELECT c.id, 'faq3.a', 'en', 'Yes. Early lessons are intentionally small, with examples and concrete requirements so you can move step by step instead of guessing inside an IDE.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq3.q', 'vi', 'Tôi mới hoàn toàn có bắt đầu được không?', 'text' FROM categories c WHERE c.name = 'faq3'
+SELECT c.id, 'faq3.q', 'vi', 'Tôi mới hoàn toàn có bắt đầu được không?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'faq3.q', 'en', 'Can I start if I am completely new?', 'text' FROM categories c WHERE c.name = 'faq3'
+SELECT c.id, 'faq3.q', 'en', 'Can I start if I am completely new?', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
 SELECT c.id, 'footer.about', 'vi', 'Giới thiệu', 'text' FROM categories c WHERE c.name = 'footer'
 UNION ALL
@@ -382,9 +384,9 @@ SELECT c.id, 'footer.contact', 'vi', 'Liên hệ', 'text' FROM categories c WHER
 UNION ALL
 SELECT c.id, 'footer.contact', 'en', 'Contact', 'text' FROM categories c WHERE c.name = 'footer'
 UNION ALL
-SELECT c.id, 'footer.copyright', 'vi', '© {{year}} Loopy. Nền tảng học lập trình tương tác.', 'text' FROM categories c WHERE c.name = 'footer'
+SELECT c.id, 'footer.copyright', 'vi', '© {{year}} Loopy. Nền tảng học lập trình tương tác.', 'text' FROM categories c WHERE c.name = 'common'
 UNION ALL
-SELECT c.id, 'footer.copyright', 'en', '© {{year}} Loopy. Interactive coding learning platform.', 'text' FROM categories c WHERE c.name = 'footer'
+SELECT c.id, 'footer.copyright', 'en', '© {{year}} Loopy. Interactive coding learning platform.', 'text' FROM categories c WHERE c.name = 'common'
 UNION ALL
 SELECT c.id, 'footer.description', 'vi', 'Loopy giúp người mới học lập trình theo từng bước nhỏ: quan sát, thay đổi, chạy thử, kiểm tra và sửa lỗi thật.', 'text' FROM categories c WHERE c.name = 'footer'
 UNION ALL
@@ -454,45 +456,45 @@ SELECT c.id, 'grading.tests.your_result', 'vi', 'Kết quả của bạn', 'text
 UNION ALL
 SELECT c.id, 'grading.tests.your_result', 'en', 'Kết quả của bạn', 'text' FROM categories c WHERE c.name = 'grading'
 UNION ALL
-SELECT c.id, 'hero.subtitle', 'vi', 'Loopy dẫn bạn qua một flow rõ ràng: quan sát code mẫu, sửa một dòng, chạy thử output, kiểm tra bằng test case, rồi debug lỗi nhỏ như khi lập trình thật.', 'text' FROM categories c WHERE c.name = 'hero'
+SELECT c.id, 'hero.subtitle', 'vi', 'Loopy dẫn bạn qua một flow rõ ràng: quan sát code mẫu, sửa một dòng, chạy thử output, kiểm tra bằng test case, rồi debug lỗi nhỏ như khi lập trình thật.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'hero.subtitle', 'en', 'Loopy guides you through a clear flow: observe sample code, edit one line, run the output, check with test cases, then debug small real mistakes.', 'text' FROM categories c WHERE c.name = 'hero'
+SELECT c.id, 'hero.subtitle', 'en', 'Loopy guides you through a clear flow: observe sample code, edit one line, run the output, check with test cases, then debug small real mistakes.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'hero.title', 'vi', 'Học code bằng từng bước nhỏ, không bị ném vào IDE một mình.', 'text' FROM categories c WHERE c.name = 'hero'
+SELECT c.id, 'hero.title', 'vi', 'Học code bằng từng bước nhỏ, không bị ném vào IDE một mình.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'hero.title', 'en', 'Learn to code in small steps, not by being dropped into an IDE alone.', 'text' FROM categories c WHERE c.name = 'hero'
+SELECT c.id, 'hero.title', 'en', 'Learn to code in small steps, not by being dropped into an IDE alone.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.badge', 'vi', 'Journey map', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.badge', 'vi', 'Journey map', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.badge', 'en', 'Journey map', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.badge', 'en', 'Journey map', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.desc', 'vi', 'Loopy ưu tiên hành trình rõ ràng hơn catalog rời rạc: bài đã xong, bài đang học và bài bị khóa được tách bạch để người mới không phải tự đoán bước kế tiếp.', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.desc', 'vi', 'Loopy ưu tiên hành trình rõ ràng hơn catalog rời rạc: bài đã xong, bài đang học và bài bị khóa được tách bạch để người mới không phải tự đoán bước kế tiếp.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.desc', 'en', 'Loopy favors a clear journey over a loose catalog: completed, active, and locked lessons are separated so beginners do not have to guess the next step.', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.desc', 'en', 'Loopy favors a clear journey over a loose catalog: completed, active, and locked lessons are separated so beginners do not have to guess the next step.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node1', 'vi', 'Hello code', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node1', 'vi', 'Hello code', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node1', 'en', 'Hello code', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node1', 'en', 'Hello code', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node2', 'vi', 'Biến', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node2', 'vi', 'Biến', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node2', 'en', 'Variables', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node2', 'en', 'Variables', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node3', 'vi', 'In output', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node3', 'vi', 'In output', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node3', 'en', 'Print output', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node3', 'en', 'Print output', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node4', 'vi', 'Điều kiện', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node4', 'vi', 'Điều kiện', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node4', 'en', 'Conditions', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node4', 'en', 'Conditions', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node5', 'vi', 'Vòng lặp', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node5', 'vi', 'Vòng lặp', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.node5', 'en', 'Loops', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.node5', 'en', 'Loops', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.title', 'vi', 'Biết mình đang ở đâu, bài nào mở tiếp theo.', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.title', 'vi', 'Biết mình đang ở đâu, bài nào mở tiếp theo.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'journey.title', 'en', 'Know where you are and what unlocks next.', 'text' FROM categories c WHERE c.name = 'journey'
+SELECT c.id, 'journey.title', 'en', 'Know where you are and what unlocks next.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
 SELECT c.id, 'landing.bottom.btn', 'vi', 'Tìm lộ trình phù hợp', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
@@ -1230,33 +1232,33 @@ SELECT c.id, 'library.title', 'vi', 'Journey Map của bạn.', 'text' FROM cate
 UNION ALL
 SELECT c.id, 'library.title', 'en', 'Your Journey Map.', 'text' FROM categories c WHERE c.name = 'library'
 UNION ALL
-SELECT c.id, 'nav.docs', 'vi', 'Tài liệu', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.docs', 'vi', 'Tài liệu', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.docs', 'en', 'Docs', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.docs', 'en', 'Docs', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.learn', 'vi', 'Học', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.learn', 'vi', 'Học', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.learn', 'en', 'Learn', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.learn', 'en', 'Learn', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.logout', 'vi', 'Đăng xuất', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.logout', 'vi', 'Đăng xuất', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.logout', 'en', 'Log out', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.logout', 'en', 'Log out', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.playground', 'vi', 'Playground', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.playground', 'vi', 'Playground', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.playground', 'en', 'Playground', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.playground', 'en', 'Playground', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.practice', 'vi', 'Luyện tập', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.practice', 'vi', 'Luyện tập', 'text' FROM categories c WHERE c.name = 'common'
 UNION ALL
-SELECT c.id, 'nav.practice', 'en', 'Practice', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.practice', 'en', 'Practice', 'text' FROM categories c WHERE c.name = 'common'
 UNION ALL
-SELECT c.id, 'nav.pvp', 'vi', 'PvP', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.pvp', 'vi', 'PvP', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.pvp', 'en', 'PvP', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.pvp', 'en', 'PvP', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.settings', 'vi', 'Cài đặt', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.settings', 'vi', 'Cài đặt', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
-SELECT c.id, 'nav.settings', 'en', 'Settings', 'text' FROM categories c WHERE c.name = 'header'
+SELECT c.id, 'nav.settings', 'en', 'Settings', 'text' FROM categories c WHERE c.name = 'nav'
 UNION ALL
 SELECT c.id, 'onboarding.badge', 'vi', 'Journey builder', 'text' FROM categories c WHERE c.name = 'onboarding'
 UNION ALL
@@ -1582,37 +1584,37 @@ SELECT c.id, 'playground.title', 'vi', 'Thử code nhanh, không ảnh hưởng 
 UNION ALL
 SELECT c.id, 'playground.title', 'en', 'Try code quickly without affecting progress.', 'text' FROM categories c WHERE c.name = 'playground'
 UNION ALL
-SELECT c.id, 'pmock.badge', 'vi', 'Lesson 03', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.badge', 'vi', 'Lesson 03', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.badge', 'en', 'Lesson 03', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.badge', 'en', 'Lesson 03', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.desc', 'vi', 'Bạn không cần đọc hết lý thuyết trước. Hãy quan sát, sửa code nhỏ, chạy thử, rồi kiểm tra bằng tiêu chí rõ ràng.', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.desc', 'vi', 'Bạn không cần đọc hết lý thuyết trước. Hãy quan sát, sửa code nhỏ, chạy thử, rồi kiểm tra bằng tiêu chí rõ ràng.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.desc', 'en', 'You do not need to read all the theory first. Observe, make a small edit, run it, then check against a clear target.', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.desc', 'en', 'You do not need to read all the theory first. Observe, make a small edit, run it, then check against a clear target.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item1', 'vi', 'Quan sát code mẫu', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item1', 'vi', 'Quan sát code mẫu', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item1', 'en', 'Observe sample code', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item1', 'en', 'Observe sample code', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item2', 'vi', 'Sửa yêu cầu nhỏ', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item2', 'vi', 'Sửa yêu cầu nhỏ', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item2', 'en', 'Edit a small requirement', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item2', 'en', 'Edit a small requirement', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item3', 'vi', 'Kiểm tra bằng rule', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item3', 'vi', 'Kiểm tra bằng rule', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item3', 'en', 'Check with rules', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item3', 'en', 'Check with rules', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item4', 'vi', 'Debug lỗi thật', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item4', 'vi', 'Debug lỗi thật', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.item4', 'en', 'Debug real errors', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.item4', 'en', 'Debug real errors', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.status', 'vi', 'Đang học', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.status', 'vi', 'Đang học', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.status', 'en', 'In progress', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.status', 'en', 'In progress', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.title', 'vi', 'Thay đổi một dòng, thấy output ngay', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.title', 'vi', 'Thay đổi một dòng, thấy output ngay', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'pmock.title', 'en', 'Change one line and see the output immediately', 'text' FROM categories c WHERE c.name = 'pmock'
+SELECT c.id, 'pmock.title', 'en', 'Change one line and see the output immediately', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
 SELECT c.id, 'practice.compete.cta', 'vi', 'Vào phòng thi đấu', 'text' FROM categories c WHERE c.name = 'practice'
 UNION ALL
@@ -2190,7 +2192,7 @@ SELECT c.id, 'profile.activity.progress_saved_title', 'vi', 'Progress đã lưu'
 UNION ALL
 SELECT c.id, 'profile.activity.progress_saved_title', 'en', 'Progress đã lưu', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.badge', 'vi', 'Profile', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.badge', 'vi', 'Hồ sơ', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.badge', 'en', 'Profile', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2224,9 +2226,9 @@ SELECT c.id, 'profile.goals.experience_level', 'en', 'Mức kinh nghiệm', 'tex
 UNION ALL
 SELECT c.id, 'profile.goals.newbie_path_desc', 'vi', 'Loopy ưu tiên một bước tiếp theo rõ ràng thay vì bắt bạn tự chọn giữa nhiều chủ đề.', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.goals.newbie_path_desc', 'en', 'Loopy ưu tiên một bước tiếp theo rõ ràng thay vì bắt bạn tự chọn giữa nhiều chủ đề.', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.goals.newbie_path_desc', 'en', 'Loopy prioritizes one clear next step instead of making you choose from too many topics.', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.goals.newbie_path_title', 'vi', 'Newbie-first path', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.goals.newbie_path_title', 'vi', 'Lộ trình cho người mới', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.goals.newbie_path_title', 'en', 'Newbie-first path', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2246,11 +2248,11 @@ SELECT c.id, 'profile.goals.update_btn', 'vi', 'Cập nhật lộ trình', 'text
 UNION ALL
 SELECT c.id, 'profile.goals.update_btn', 'en', 'Update my path', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.goals.view_all_paths', 'vi', 'View all paths', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.goals.view_all_paths', 'vi', 'Xem tất cả lộ trình', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.goals.view_all_paths', 'en', 'View all paths', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.journey.badge', 'vi', 'Journey progress', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.journey.badge', 'vi', 'Tiến độ học tập', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.journey.badge', 'en', 'Journey progress', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2286,23 +2288,23 @@ SELECT c.id, 'profile.journey.title', 'vi', 'Bạn đang xây thói quen học c
 UNION ALL
 SELECT c.id, 'profile.journey.title', 'en', 'You are building a coding habit one step at a time.', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.loading', 'vi', 'Loading profile...', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.loading', 'vi', 'Đang tải hồ sơ…', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.loading', 'en', 'Loading profile...', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.metric.note.complete_lesson', 'vi', 'completeLesson', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.metric.note.complete_lesson', 'vi', 'Đã hoàn thành và lưu', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.metric.note.complete_lesson', 'en', 'completeLesson', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.metric.note.complete_lesson', 'en', 'Completed and saved', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.metric.note.daily_habit', 'vi', 'daily habit', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.metric.note.daily_habit', 'vi', 'Thói quen học mỗi ngày', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.metric.note.daily_habit', 'en', 'daily habit', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.metric.note.saved_lessons', 'vi', 'saved lessons', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.metric.note.saved_lessons', 'vi', 'Bài học đã lưu', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.metric.note.saved_lessons', 'en', 'saved lessons', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.next.badge', 'vi', 'Next lesson', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.next.badge', 'vi', 'Bài học tiếp theo', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.next.badge', 'en', 'Next lesson', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2370,11 +2372,11 @@ SELECT c.id, 'profile.notify.badge', 'vi', 'Thông báo', 'text' FROM categories
 UNION ALL
 SELECT c.id, 'profile.notify.badge', 'en', 'Notice', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.saved_lessons.plural', 'vi', '{count} saved lessons', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.saved_lessons.plural', 'vi', '{count} bài học đã lưu', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.saved_lessons.plural', 'en', '{count} saved lessons', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.saved_lessons.singular', 'vi', '1 saved lesson', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.saved_lessons.singular', 'vi', '1 bài học đã lưu', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.saved_lessons.singular', 'en', '1 saved lesson', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2390,7 +2392,7 @@ SELECT c.id, 'profile.settings.avatar_title', 'vi', 'Ảnh đại diện', 'text
 UNION ALL
 SELECT c.id, 'profile.settings.avatar_title', 'en', 'Ảnh đại diện', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.bio', 'vi', 'Bio', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.bio', 'vi', 'Giới thiệu', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.settings.bio', 'en', 'Bio', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2438,17 +2440,17 @@ SELECT c.id, 'profile.settings.language', 'vi', 'Ngôn ngữ ưu tiên', 'text' 
 UNION ALL
 SELECT c.id, 'profile.settings.language', 'en', 'Preferred language', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.language.cpp', 'vi', 'C++ School Foundations', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.language.cpp', 'vi', 'C++', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.language.cpp', 'en', 'C++ School Foundations', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.language.cpp', 'en', 'C++', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.language.javascript', 'vi', 'JavaScript Web Starter', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.language.javascript', 'vi', 'JavaScript', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.language.javascript', 'en', 'JavaScript Web Starter', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.language.javascript', 'en', 'JavaScript', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.language.python', 'vi', 'Python Foundations', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.language.python', 'vi', 'Python', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.language.python', 'en', 'Python Foundations', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.language.python', 'en', 'Python', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.settings.learning_goal', 'vi', 'Mục tiêu học', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2462,7 +2464,7 @@ SELECT c.id, 'profile.settings.locked', 'vi', 'Khóa', 'text' FROM categories c 
 UNION ALL
 SELECT c.id, 'profile.settings.locked', 'en', 'Khóa', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.settings.onboarding', 'vi', 'Onboarding', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.settings.onboarding', 'vi', 'Thiết lập lộ trình', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.settings.onboarding', 'en', 'Onboarding', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2522,7 +2524,7 @@ SELECT c.id, 'profile.settings.upload_label', 'vi', 'Hoặc tự tải ảnh lê
 UNION ALL
 SELECT c.id, 'profile.settings.upload_label', 'en', 'Hoặc tự tải ảnh lên', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.sidebar.role', 'vi', 'Loopy learner', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.sidebar.role', 'vi', 'Người học Loopy', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.sidebar.role', 'en', 'Loopy learner', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2534,7 +2536,7 @@ SELECT c.id, 'profile.stats.saved', 'vi', 'Progress đã lưu', 'text' FROM cate
 UNION ALL
 SELECT c.id, 'profile.stats.saved', 'en', 'Progress saved', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.stats.streak', 'vi', 'Streak', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.stats.streak', 'vi', 'Chuỗi ngày học', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.stats.streak', 'en', 'Streak', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -2582,7 +2584,7 @@ SELECT c.id, 'profile.toast.save_success', 'vi', 'Cập nhật thông tin thành
 UNION ALL
 SELECT c.id, 'profile.toast.save_success', 'en', 'Cập nhật thông tin thành công! Trang sẽ tự làm mới...', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
-SELECT c.id, 'profile.today.badge', 'vi', 'Today focus', 'text' FROM categories c WHERE c.name = 'profile'
+SELECT c.id, 'profile.today.badge', 'vi', 'Mục tiêu hôm nay', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
 SELECT c.id, 'profile.today.badge', 'en', 'Today focus', 'text' FROM categories c WHERE c.name = 'profile'
 UNION ALL
@@ -3070,29 +3072,29 @@ SELECT c.id, 'settings.uploadPhoto', 'vi', 'Tải ảnh lên', 'text' FROM categ
 UNION ALL
 SELECT c.id, 'settings.uploadPhoto', 'en', 'Upload Photo', 'text' FROM categories c WHERE c.name = 'settings'
 UNION ALL
-SELECT c.id, 'step1.desc', 'vi', 'Đọc ví dụ ngắn, chạy code mẫu và hiểu output trước khi tự viết.', 'text' FROM categories c WHERE c.name = 'step1'
+SELECT c.id, 'step1.desc', 'vi', 'Đọc ví dụ ngắn, chạy code mẫu và hiểu output trước khi tự viết.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step1.desc', 'en', 'Read a short example, run the sample code, and understand the output before writing on your own.', 'text' FROM categories c WHERE c.name = 'step1'
+SELECT c.id, 'step1.desc', 'en', 'Read a short example, run the sample code, and understand the output before writing on your own.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step1.title', 'vi', 'Quan sát', 'text' FROM categories c WHERE c.name = 'step1'
+SELECT c.id, 'step1.title', 'vi', 'Quan sát', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step1.title', 'en', 'Observe', 'text' FROM categories c WHERE c.name = 'step1'
+SELECT c.id, 'step1.title', 'en', 'Observe', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step2.desc', 'vi', 'Sửa một phần nhỏ trong editor. Loopy kiểm tra đúng yêu cầu bằng rule/test case.', 'text' FROM categories c WHERE c.name = 'step2'
+SELECT c.id, 'step2.desc', 'vi', 'Sửa một phần nhỏ trong editor. Loopy kiểm tra đúng yêu cầu bằng rule/test case.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step2.desc', 'en', 'Change one small part in the editor. Loopy checks the requirement with deterministic rules or tests.', 'text' FROM categories c WHERE c.name = 'step2'
+SELECT c.id, 'step2.desc', 'en', 'Change one small part in the editor. Loopy checks the requirement with deterministic rules or tests.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step2.title', 'vi', 'Thay đổi', 'text' FROM categories c WHERE c.name = 'step2'
+SELECT c.id, 'step2.title', 'vi', 'Thay đổi', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step2.title', 'en', 'Edit', 'text' FROM categories c WHERE c.name = 'step2'
+SELECT c.id, 'step2.title', 'en', 'Edit', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step3.desc', 'vi', 'Gặp lỗi nhỏ có chủ đích, đọc terminal và debug từng bước như khi code thật.', 'text' FROM categories c WHERE c.name = 'step3'
+SELECT c.id, 'step3.desc', 'vi', 'Gặp lỗi nhỏ có chủ đích, đọc terminal và debug từng bước như khi code thật.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step3.desc', 'en', 'Meet small intentional errors, read the terminal, and debug step by step like real programming.', 'text' FROM categories c WHERE c.name = 'step3'
+SELECT c.id, 'step3.desc', 'en', 'Meet small intentional errors, read the terminal, and debug step by step like real programming.', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step3.title', 'vi', 'Sửa lỗi', 'text' FROM categories c WHERE c.name = 'step3'
+SELECT c.id, 'step3.title', 'vi', 'Sửa lỗi', 'text' FROM categories c WHERE c.name = 'landing'
 UNION ALL
-SELECT c.id, 'step3.title', 'en', 'Debug', 'text' FROM categories c WHERE c.name = 'step3'
+SELECT c.id, 'step3.title', 'en', 'Debug', 'text' FROM categories c WHERE c.name = 'landing'
 ON CONFLICT (category_id, key, language) DO UPDATE SET
   value = EXCLUDED.value,
   type = EXCLUDED.type,

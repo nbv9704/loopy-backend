@@ -1,3 +1,4 @@
+import { authProviderFailure } from '../services/auth/provider-error'
 import { Request, Response, NextFunction } from 'express'
 import { supabase } from '../db/supabase'
 import { errors } from './errorHandler'
@@ -24,11 +25,8 @@ export const authenticate = async (req: AuthRequest, _res: Response, next: NextF
       error,
     } = await supabase.auth.getUser(token)
 
-    if (error || !user) {
-      const { logger } = await import('../utils/logger')
-      logger.error('Supabase getUser failed in auth middleware:', error)
-      throw errors.invalidToken()
-    }
+    if (error) throw authProviderFailure(error) || errors.invalidToken()
+    if (!user) throw errors.invalidToken()
 
     req.user = {
       id: user.id,
@@ -49,9 +47,12 @@ export const optionalAuth = async (req: AuthRequest, _res: Response, next: NextF
     if (token) {
       const {
         data: { user },
+        error,
       } = await supabase.auth.getUser(token)
 
-      if (user) {
+      const unavailable = authProviderFailure(error)
+      if (unavailable) return next(unavailable)
+      if (!error && user) {
         req.user = {
           id: user.id,
           email: user.email!,
@@ -61,7 +62,6 @@ export const optionalAuth = async (req: AuthRequest, _res: Response, next: NextF
 
     next()
   } catch (error) {
-    // Ignore auth errors for optional auth
-    next()
+    next(authProviderFailure(error) || error)
   }
 }

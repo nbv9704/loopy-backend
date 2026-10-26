@@ -4,6 +4,8 @@ import { optionalAuth } from '../middleware/auth'
 import * as lessonCheckController from '../controllers/lesson-check.controller'
 import { getAIHint } from '../controllers/grading.controller'
 import { submissionRateLimiter } from '../middleware/rateLimiter'
+import { validate } from '../middleware/validate'
+import { publicSchemas } from '../schemas/public.schemas'
 
 const router = Router()
 
@@ -126,7 +128,7 @@ const router = Router()
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id', lessonController.getLessonById)
+router.get('/:id', validate(publicSchemas.uuidIdParam), lessonController.getLessonById)
 
 /**
  * @openapi
@@ -217,20 +219,40 @@ router.get('/:id', lessonController.getLessonById)
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id/exercises', lessonController.getExercisesByLesson)
+router.get('/:id/exercises', validate(publicSchemas.uuidIdParam), lessonController.getExercisesByLesson)
 
 /**
  * Route to request an AI hint for the current lesson code.
  * AI is only used for hints; pass/fail remains deterministic via /check.
  */
-router.post('/:lessonId/hint', optionalAuth, submissionRateLimiter, (req, res, next) => {
-  req.params.exerciseId = req.params.lessonId
-  return getAIHint(req, res, next)
-})
+router.post(
+  '/:lessonId/hint',
+  optionalAuth,
+  validate(publicSchemas.lessonHint),
+  submissionRateLimiter,
+  (req, res, next) => {
+    req.params.exerciseId = req.params.lessonId
+    return getAIHint(req, res, next)
+  }
+)
 
 /**
  * Route to check lesson code using deterministic validation or test-runner.
  */
-router.post('/:lessonId/check', optionalAuth, lessonCheckController.checkLesson)
+router.post(
+  '/:lessonId/check',
+  optionalAuth,
+  validate(publicSchemas.lessonCheck),
+  submissionRateLimiter,
+  lessonCheckController.checkLesson
+)
+
+router.post(
+  '/:lessonId/steps/:stepId/check',
+  optionalAuth,
+  validate(publicSchemas.lessonStepCheck),
+  submissionRateLimiter,
+  lessonCheckController.checkLessonStep
+)
 
 export default router

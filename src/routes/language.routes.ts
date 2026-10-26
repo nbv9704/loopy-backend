@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import * as languageController from '../controllers/language.controller'
+import { validate } from '../middleware/validate'
+import { publicSchemas } from '../schemas/public.schemas'
 
 const router = Router()
 
@@ -149,7 +151,7 @@ router.get('/', languageController.getAllLanguages)
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id', languageController.getLanguageById)
+router.get('/:id', validate(publicSchemas.languageIdParam), languageController.getLanguageById)
 
 /**
  * @openapi
@@ -227,7 +229,11 @@ router.get('/:id', languageController.getLanguageById)
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id/chapters', languageController.getChaptersByLanguage)
+router.get(
+  '/:id/chapters',
+  validate(publicSchemas.languageIdParam),
+  languageController.getChaptersByLanguage
+)
 
 /**
  * @openapi
@@ -248,6 +254,12 @@ router.get('/:id/chapters', languageController.getChaptersByLanguage)
  *           type: string
  *         description: Language identifier (e.g., javascript, python, cpp)
  *         example: javascript
+ *       - in: query
+ *         name: pathId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Optional active learning path for this language; uses mapped chapter order.
  *     responses:
  *       200:
  *         description: Curriculum retrieved successfully
@@ -336,8 +348,16 @@ router.get('/:id/chapters', languageController.getChaptersByLanguage)
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id/curriculum', languageController.getChaptersWithLessons)
+router.get(
+  '/:id/curriculum',
+  validate(publicSchemas.languageCurriculum),
+  languageController.getChaptersWithLessons
+)
 
-router.get('/:languageId/path/:learningPath/curriculum', languageController.getChaptersWithLessonsByPath)
+router.get(
+  '/:languageId/path/:learningPath/curriculum',
+  validate(publicSchemas.languagePathCurriculum),
+  languageController.getChaptersWithLessonsByPath
+)
 
 export default router

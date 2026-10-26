@@ -4,7 +4,19 @@ import { config } from '../config'
 export const executeSchemas = {
   execute: z.object({
     body: z.object({
-      language: z.enum(['javascript', 'js', 'python', 'py', 'cpp', 'c++', 'java', 'go', 'golang', 'rust', 'rs']),
+      language: z.enum([
+        'javascript',
+        'js',
+        'python',
+        'py',
+        'cpp',
+        'c++',
+        'java',
+        'go',
+        'golang',
+        'rust',
+        'rs',
+      ]),
       code: z
         .string()
         .min(1, 'Code không được để trống')
@@ -17,7 +29,7 @@ export const executeSchemas = {
 
   validate: z.object({
     body: z.object({
-      exerciseId: z.string().uuid('Exercise ID không hợp lệ'),
+      exerciseId: z.guid('Exercise ID không hợp lệ'),
       code: z
         .string()
         .min(1, 'Code không được để trống')

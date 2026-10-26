@@ -3,6 +3,7 @@ import * as profileController from '../controllers/profile.controller'
 import { authenticate } from '../middleware/auth'
 import { validate } from '../middleware/validate'
 import { profileSchemas } from '../schemas/profile.schemas'
+import { publicSchemas } from '../schemas/public.schemas'
 
 const router = Router()
 
@@ -258,6 +259,6 @@ router.put('/me', authenticate, validate(profileSchemas.update), profileControll
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id', profileController.getPublicProfile)
+router.get('/:id', validate(publicSchemas.uuidIdParam), profileController.getPublicProfile)
 
 export default router

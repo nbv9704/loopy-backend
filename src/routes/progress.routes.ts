@@ -265,7 +265,11 @@ router.get('/me', progressController.getUserProgress)
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/me/:lessonId', progressController.getLessonProgress)
+router.get(
+  '/me/:lessonId',
+  validate(progressSchemas.lessonParams),
+  progressController.getLessonProgress
+)
 
 /**
  * @openapi
@@ -297,7 +301,7 @@ router.get('/me/:lessonId', progressController.getLessonProgress)
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [not_started, in_progress, completed]
+ *                 enum: [not_started, in_progress]
  *                 description: Progress status to set
  *                 example: in_progress
  *               timeSpent:
@@ -393,7 +397,7 @@ router.post('/me/:lessonId', validate(progressSchemas.update), progressControlle
  *     tags:
  *       - Progress
  *     summary: Mark lesson as complete
- *     description: Mark a specific lesson as completed for the authenticated user. Sets status to 'completed' and records completion timestamp. Creates a new progress record if one doesn't exist. Requires authentication.
+ *     description: Complete a published lesson using the saved submissionId from its latest deterministic check. Proof ownership, content version, progress and first-completion rewards are validated in one database transaction. Retries do not award points again.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -405,7 +409,23 @@ router.post('/me/:lessonId', validate(progressSchemas.update), progressControlle
  *           format: uuid
  *         description: Lesson unique identifier (UUID)
  *         example: "456e7890-e89b-12d3-a456-426614174001"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [submissionId]
+ *             properties:
+ *               submissionId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Saved receipt returned by the final successful lesson check
  *     responses:
+ *       409:
+ *         description: Lesson content or latest check changed; reload and check again
+ *       503:
+ *         description: Checked-completion schema is not ready
  *       200:
  *         description: Lesson marked as complete successfully
  *         content:
@@ -478,6 +498,10 @@ router.post('/me/:lessonId', validate(progressSchemas.update), progressControlle
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.put('/me/:lessonId/complete', progressController.completeLesson)
+router.put(
+  '/me/:lessonId/complete',
+  validate(progressSchemas.complete),
+  progressController.completeLesson
+)
 
 export default router

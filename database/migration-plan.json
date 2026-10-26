@@ -1,0 +1,18 @@
+{
+  "bootstrap": ["baseline/001-current.sql"],
+  "forward": [
+    "migrations/041-atomic-progress.sql",
+    "migrations/042-atomic-bulk-import.sql",
+    "migrations/043-api-data-boundaries.sql",
+    "migrations/044-atomic-practice.sql",
+    "migrations/045-readiness.sql",
+    "migrations/046-audit-and-signup-trigger.sql",
+    "migrations/047-pvp-score-rpc.sql",
+    "migrations/048-atomic-pvp-submissions.sql",
+    "migrations/049-pvp-lifecycle.sql",
+    "migrations/050-checked-lesson-completion.sql",
+    "migrations/051-atomic-pvp-matchmaking.sql",
+    "migrations/052-cms-transactions.sql",
+    "migrations/053-catalog-read-privileges.sql"
+  ]
+}

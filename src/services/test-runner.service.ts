@@ -9,9 +9,10 @@
  */
 
 import { JavaScriptExecutor } from './javascript-executor.service'
-import { PistonExecutorService, isPistonLanguage, normalizePistonLanguage } from './piston-executor.service'
+import { PistonExecutorService, normalizePistonLanguage } from './piston-executor.service'
 import { GlotExecutorService } from './glot-executor.service'
-import { config } from '../config'
+import { selectExecutionRunner } from './execution/languages'
+import { AppError } from '../middleware/errorHandler'
 import type { ExecutionResult } from './grading.types'
 
 // ============================================================================
@@ -100,23 +101,24 @@ export class TestRunnerService {
    * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 2.8
    */
   async runTests(
-    code: string, 
-    testCases: TestCase[], 
-    language: string, 
+    code: string,
+    testCases: TestCase[],
+    language: string,
     gradingMode: 'stdout' | 'function' = 'stdout'
   ): Promise<TestRunResult> {
     const startTime = Date.now()
     const results: TestCaseResult[] = []
 
-    // Execute test cases sequentially to prevent resource contention
+    // An incomplete suite must not certify code by skipping an invalid required case.
     for (const testCase of testCases) {
-      // Skip invalid test cases (Requirement 14.7)
       const validation = this.validateTestCase(testCase)
       if (!validation.valid) {
-        console.warn(`Skipping invalid test case ${testCase.id}: ${validation.error}`)
-        continue
+        throw new Error('Invalid test case configuration')
       }
+    }
 
+    // Execute test cases sequentially to prevent resource contention.
+    for (const testCase of testCases) {
       const result = await this.executeTestCase(code, testCase, language, gradingMode)
       results.push(result)
     }
@@ -144,14 +146,13 @@ export class TestRunnerService {
 
     try {
       // Build executable code
-      const executableCode = gradingMode === 'function' 
-        ? this.buildExecutableCode(code, testCase.input, language)
-        : code;
+      const executableCode =
+        gradingMode === 'function' ? this.buildExecutableCode(code, testCase.input, language) : code
 
       // Execute with timeout
       const executionResult = await this.executeCode(
         executableCode,
-        gradingMode === 'function' ? testCase.input : undefined,
+        testCase.input,
         language,
         testCase.timeout
       )
@@ -201,6 +202,7 @@ export class TestRunnerService {
         isHidden: testCase.isHidden,
       }
     } catch (error: unknown) {
+      if (error instanceof AppError) throw error
       const errMessage = error instanceof Error ? error.message : String(error)
       // Handle timeout errors (Requirement 2.4)
       if (errMessage.includes('timeout')) {
@@ -293,42 +295,12 @@ if __funcs:
     language: string,
     timeout: number
   ): Promise<ExecutionResult> {
-    switch (language) {
-      case 'javascript':
-      case 'js':
-        return this.jsExecutor.execute(code, input, timeout)
-
-      default: {
-        const normalizedLanguage = normalizePistonLanguage(language)
-        if (normalizedLanguage && isPistonLanguage(normalizedLanguage)) {
-          if (config.piston.apiUrl) {
-            return this.pistonExecutor.execute(normalizedLanguage, code, input, timeout)
-          }
-
-          if (config.glot.apiToken) {
-            return this.glotExecutor.execute(normalizedLanguage, code, input, timeout)
-          }
-
-          return {
-            output: null,
-            stdout: '',
-            stderr: `No external runner configured for language: ${language}`,
-            exitCode: 1,
-            executionTime: 0,
-            error: `Ngôn ngữ ${normalizedLanguage} cần runner để Kiểm tra bằng test case. Hãy cấu hình PISTON_API_URL hoặc GLOT_API_TOKEN rồi thử lại.`,
-          }
-        }
-
-        return {
-          output: null,
-          stdout: '',
-          stderr: `Unsupported language: ${language}`,
-          exitCode: 1,
-          executionTime: 0,
-          error: `Unsupported language: ${language}`,
-        }
-      }
-    }
+    const runner = selectExecutionRunner(language)
+    if (runner === 'local') return this.jsExecutor.execute(code, input, timeout)
+    const normalized = normalizePistonLanguage(language)!
+    return runner === 'piston'
+      ? this.pistonExecutor.execute(normalized, code, input, timeout)
+      : this.glotExecutor.execute(normalized, code, input, timeout)
   }
 
   /**
@@ -394,7 +366,8 @@ if __funcs:
       const actualObj = actual as Record<string, unknown>
       const expectedObj = expected as Record<string, unknown>
       return actualKeys.every(
-        (key, index) => key === expectedKeys[index] && this.deepEqual(actualObj[key], expectedObj[key])
+        (key, index) =>
+          key === expectedKeys[index] && this.deepEqual(actualObj[key], expectedObj[key])
       )
     }
 

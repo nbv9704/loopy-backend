@@ -1,3 +1,4 @@
+import { confirmAIHint } from './ai-hint-response'
 /**
  * Groq Analyzer Service for Auto-Grading System
  *
@@ -152,19 +153,19 @@ export class GroqAnalyzerService {
           max_tokens: 256, // Short hint
           response_format: { type: 'json_object' },
         })
-        
+
         this.quotas[modelKey]++
         const text = completion.choices[0]?.message?.content
-        
+
         if (!text) throw new Error('Empty response')
-        
+
         const parsed = JSON.parse(text)
-        logger.info('Groq hint generated', { 
+        logger.info('Groq hint generated', {
           responseTime: Date.now() - startTime,
-          model: model.label
+          model: model.label,
         })
-        
-        return { hint: parsed.hint || 'Hãy đọc kỹ lại đề bài và xem bạn có bỏ lỡ phần nào không nhé.' }
+
+        return confirmAIHint(parsed)
       } catch (error: any) {
         lastError = error
         logger.warn(`Groq ${model.label} failed for hint, trying next`, { error: error.message })

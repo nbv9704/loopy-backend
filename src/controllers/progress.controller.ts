@@ -1,75 +1,33 @@
+import { readProgressOverview } from '../services/progress/read-progress'
 import { Response, NextFunction } from 'express'
 import { supabaseAdmin } from '../db/supabase'
 import { AuthRequest } from '../middleware/auth'
-import { groupProgressByLanguage, handleGamification } from '../services/progress.service'
+import { getStudyDateKey, handleGamification } from '../services/progress.service'
 import { keysToCamel } from '../utils/caseConverter'
+import { errors } from '../middleware/errorHandler'
+import { completeCheckedLesson } from '../services/lesson-check/completion'
 
-/**
- * Progress Controller
- * REVIEW: Refactored to use ProgressService for business logic
- * REVIEW: Replaced manual read-then-write with atomic upserts
- * REVIEW: Controller now only handles HTTP logic (req/res)
- */
+/** HTTP progress APIs; database transactions own progress and reward transitions. */
+
+async function ensurePublishedLesson(lessonId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('lessons')
+    .select('id')
+    .eq('id', lessonId)
+    .eq('status', 'published')
+    .single()
+
+  if (error && error.code !== 'PGRST116')
+    throw errors.databaseError('Không tải được bài học. Vui lòng thử lại.')
+  if (!data) {
+    throw errors.notFound('Lesson')
+  }
+}
 
 export const getUserProgress = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id
-
-    const { data, error } = await supabaseAdmin
-      .from('user_progress')
-      .select('*, lessons(id, lesson_id, title, chapter_id, chapters(language_id))')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-
-    if (error) throw error
-
-    // Calculate stats
-    const completedLessons = data.filter((p: any) => p.status === 'completed')
-    const completedCount = completedLessons.length
-
-    // Get total lessons count
-    const { count: totalLessons } = await supabaseAdmin
-      .from('lessons')
-      .select('*', { count: 'exact', head: true })
-
-    // REVIEW: Extracted grouping logic to ProgressService
-    const progressByLanguage = groupProgressByLanguage(data)
-
-    // Fetch Streak from user_streaks cache table
-    const { data: streak } = await supabaseAdmin
-      .from('user_streaks')
-      .select('current_streak, longest_streak')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    const currentStreak = streak?.current_streak || 0
-    const longestStreak = streak?.longest_streak || 0
-
-    // Get total points and badges
-    const { data: profile } = await supabaseAdmin
-      .from('user_profiles')
-      .select('points')
-      .eq('id', userId)
-      .single()
-
-    const { data: badges } = await supabaseAdmin
-      .from('user_badges')
-      .select('*, badges(*)')
-      .eq('user_id', userId)
-
-    res.json({
-      success: true,
-      data: keysToCamel({
-        progress: data,
-        summary: progressByLanguage,
-        completedLessons: completedCount,
-        totalLessons: totalLessons || 99,
-        currentStreak: currentStreak,
-        longestStreak: longestStreak,
-        totalPoints: profile?.points || 0,
-        badges: (badges || []).map((b: any) => b.badges),
-      }),
-    })
+    const snapshot = await readProgressOverview(req.user!.id)
+    res.json({ success: true, data: keysToCamel(snapshot) })
   } catch (error) {
     next(error)
   }
@@ -79,6 +37,8 @@ export const getLessonProgress = async (req: AuthRequest, res: Response, next: N
   try {
     const userId = req.user!.id
     const { lessonId } = req.params
+
+    await ensurePublishedLesson(lessonId)
 
     const { data, error } = await supabaseAdmin
       .from('user_progress')
@@ -103,48 +63,36 @@ export const getLessonProgress = async (req: AuthRequest, res: Response, next: N
   }
 }
 
-/**
- * REVIEW: Replaced manual read-then-write with atomic upsert
- * REVIEW: Single network request, no race conditions
- */
+/** General progress updates cannot complete a lesson. */
 export const updateProgress = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id
     const { lessonId } = req.params
     const { status, timeSpent } = req.body
 
-    // Get existing progress to calculate cumulative time
-    const { data: existing } = await supabaseAdmin
-      .from('user_progress')
-      .select('time_spent')
-      .eq('user_id', userId)
-      .eq('lesson_id', lessonId)
-      .single()
-
-    const cumulativeTime = existing ? existing.time_spent + (timeSpent || 0) : timeSpent || 0
-
-    // REVIEW: Atomic upsert - single network request
-    const { data, error } = await supabaseAdmin
-      .from('user_progress')
-      .upsert(
-        {
-          user_id: userId,
-          lesson_id: lessonId,
-          status,
-          time_spent: cumulativeTime,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,lesson_id' }
+    if (status === 'completed') {
+      throw errors.badRequest(
+        'Use completeLesson after lesson validation to mark a lesson completed'
       )
-      .select()
-      .single()
+    }
+
+    await ensurePublishedLesson(lessonId)
+
+    const { data, error } = await supabaseAdmin.rpc('update_lesson_progress_atomically', {
+      p_user_id: userId,
+      p_lesson_id: lessonId,
+      p_status: status,
+      p_time_spent: timeSpent || 0,
+    })
 
     if (error) throw error
+    const progress = Array.isArray(data) ? data[0] : data
+    if (!progress) throw errors.databaseError('Failed to update progress')
 
     res.json({
       success: true,
       data: keysToCamel({
-        progress: data,
+        progress,
       }),
     })
   } catch (error) {
@@ -152,51 +100,26 @@ export const updateProgress = async (req: AuthRequest, res: Response, next: Next
   }
 }
 
-/**
- * REVIEW: Replaced manual read-then-write with atomic upsert
- * REVIEW: Single network request, no race conditions
- */
+/** Receipt validation and first-completion rewards commit together. */
 export const completeLesson = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id
     const { lessonId } = req.params
 
-    // Check if lesson was already completed to prevent double point awarding
-    const { data: existing } = await supabaseAdmin
-      .from('user_progress')
-      .select('status, completed_at')
-      .eq('user_id', userId)
-      .eq('lesson_id', lessonId)
-      .maybeSingle()
-
-    const isFirstTime = !existing || existing.status !== 'completed'
-    const completedAt = existing?.completed_at || new Date().toISOString()
-
-    // REVIEW: Atomic upsert - single network request
-    const { data, error } = await supabaseAdmin
-      .from('user_progress')
-      .upsert(
-        {
-          user_id: userId,
-          lesson_id: lessonId,
-          status: 'completed',
-          completed_at: completedAt,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,lesson_id' }
-      )
-      .select()
-      .single()
-
-    if (error) throw error
-
-    // Handle gamification (points, badges, streaks)
-    const gamification = await handleGamification(userId, lessonId, isFirstTime)
+    const completion = await completeCheckedLesson(
+      userId,
+      lessonId,
+      req.body.submissionId,
+      getStudyDateKey()
+    )
+    const wasFirstCompletion = completion.was_first_completion
+    // Points and daily activity are committed in the same DB transaction as progress.
+    const gamification = await handleGamification(userId, lessonId, wasFirstCompletion, true)
 
     res.json({
       success: true,
       data: keysToCamel({
-        progress: data,
+        progress: completion,
         gamification,
       }),
     })

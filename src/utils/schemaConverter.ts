@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { zodToJsonSchema } from 'zod-to-json-schema'
 
 /**
  * Converts a single Zod schema to JSON Schema format compatible with OpenAPI 3.0
@@ -16,10 +15,11 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
  * // Returns: { type: 'object', properties: { email: { type: 'string', format: 'email' }, ... } }
  */
 export function convertZodSchema(zodSchema: z.ZodTypeAny): object {
-  // Type assertion to work around TypeScript deep instantiation issue
-  return zodToJsonSchema(zodSchema as any, {
-    target: 'openApi3',
-    $refStrategy: 'none',
+  return z.toJSONSchema(zodSchema, {
+    target: 'openapi-3.0',
+    io: 'input',
+    // Documentation only: custom refinements still run in the actual Zod validators.
+    unrepresentable: 'any',
   })
 }
 
@@ -32,7 +32,7 @@ export function convertZodSchema(zodSchema: z.ZodTypeAny): object {
  * @example
  * const schemas = {
  *   LoginRequest: z.object({ email: z.string().email(), password: z.string() }),
- *   User: z.object({ id: z.string().uuid(), email: z.string() })
+ *   User: z.object({ id: z.guid(), email: z.string() })
  * };
  * const components = generateSchemaComponents(schemas);
  * // Returns: { LoginRequest: { type: 'object', ... }, User: { type: 'object', ... } }

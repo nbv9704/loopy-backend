@@ -221,6 +221,11 @@ router.post(
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id/submissions', authenticate, exerciseController.getSubmissions)
+router.get(
+  '/:id/submissions',
+  authenticate,
+  validate(exerciseSchemas.params),
+  exerciseController.getSubmissions
+)
 
 export default router

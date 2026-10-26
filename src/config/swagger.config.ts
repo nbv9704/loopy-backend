@@ -20,7 +20,7 @@ export const swaggerOptions: Options = {
     },
     servers: [
       {
-        url: config.nodeEnv === 'production' ? 'https://api.loopy.com' : 'http://localhost:3000',
+        url: config.apiUrl,
         description: config.nodeEnv === 'production' ? 'Production server' : 'Development server',
       },
     ],

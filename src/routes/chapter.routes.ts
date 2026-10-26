@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import * as chapterController from '../controllers/chapter.controller'
+import { validate } from '../middleware/validate'
+import { publicSchemas } from '../schemas/public.schemas'
 
 const router = Router()
 
@@ -95,7 +97,7 @@ const router = Router()
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id', chapterController.getChapterById)
+router.get('/:id', validate(publicSchemas.uuidIdParam), chapterController.getChapterById)
 
 /**
  * @openapi
@@ -179,6 +181,6 @@ router.get('/:id', chapterController.getChapterById)
  *       429:
  *         $ref: '#/components/responses/RateLimitError'
  */
-router.get('/:id/lessons', chapterController.getLessonsByChapter)
+router.get('/:id/lessons', validate(publicSchemas.uuidIdParam), chapterController.getLessonsByChapter)
 
 export default router

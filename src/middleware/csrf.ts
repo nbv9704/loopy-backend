@@ -1,18 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
-import { config } from '../config'
-
-const getEnvAllowedOrigins = () => {
-  const envOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []
-  return [
-    config.frontendUrl,
-    'https://loopy.vercel.app',
-    'https://loopy-frontend-blond.vercel.app',
-    ...envOrigins
-  ].map(o => o.trim()).filter(Boolean)
-}
+import { getAllowedOrigins } from '../utils/origins'
 
 function isOriginAllowed(origin: string): boolean {
-  const allowedOrigins = getEnvAllowedOrigins()
+  const allowedOrigins = getAllowedOrigins()
   return allowedOrigins.includes(origin)
 }
 

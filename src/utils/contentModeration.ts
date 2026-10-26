@@ -1,6 +1,6 @@
 /**
  * Content Moderation Utility
- * 
+ *
  * Provides centralized content validation against banned keywords.
  * Implements caching for performance and supports Vietnamese text normalization.
  */
@@ -8,7 +8,9 @@
 import { supabaseAdmin } from '../db/supabase'
 import { errors } from '../middleware/errorHandler'
 import { logger } from './logger'
+import { readAllRows } from '../services/read-all-rows'
 
+let cacheRevision = 0
 let keywordCache: string[] | null = null
 let cacheExpiry: number = 0
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -22,9 +24,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 export function normalizeText(text: string): string {
   return text
     .toLowerCase()
-    .replace(/đ/g, 'd')  // Vietnamese đ → d
-    .replace(/Đ/g, 'D')  // Vietnamese Đ → D (though already lowercased)
-    .normalize('NFD')     // Decompose combined characters
+    .replace(/đ/g, 'd') // Vietnamese đ → d
+    .replace(/Đ/g, 'D') // Vietnamese Đ → D (though already lowercased)
+    .normalize('NFD') // Decompose combined characters
     .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
 }
 
@@ -34,25 +36,27 @@ export function normalizeText(text: string): string {
  */
 export async function loadKeywords(): Promise<string[]> {
   const now = Date.now()
-  
+
   // Return cached keywords if still valid
   if (keywordCache && now < cacheExpiry) {
     return keywordCache
   }
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from('content_moderation_keywords')
-      .select('keyword')
-      .eq('is_active', true)
-
-    if (error) {
-      logger.error('Failed to load moderation keywords:', error)
-      // Decision 2A: On error, allow content (don't block everything)
-      return []
-    }
-
-    keywordCache = (data || []).map(row => row.keyword.toLowerCase())
+    const owner = cacheRevision
+    const data = await readAllRows<{ id: string; keyword: string }>(
+      (offset, end) =>
+        supabaseAdmin
+          .from('content_moderation_keywords')
+          .select('id,keyword', { count: 'exact' })
+          .eq('is_active', true)
+          .order('id', { ascending: true })
+          .range(offset, end),
+      'Không tải đủ từ khóa kiểm duyệt.'
+    )
+    const loaded = data.map(row => row.keyword.toLowerCase())
+    if (owner !== cacheRevision) return loadKeywords()
+    keywordCache = loaded
     cacheExpiry = now + CACHE_TTL_MS
 
     logger.info(`Loaded ${keywordCache.length} active moderation keywords`)
@@ -73,7 +77,7 @@ export async function containsBannedKeywords(text: string): Promise<{
   matches: string[]
 }> {
   const keywords = await loadKeywords()
-  
+
   // Decision 2A: Empty keyword list = allow all content
   if (keywords.length === 0) {
     return { found: false, matches: [] }
@@ -83,9 +87,12 @@ export async function containsBannedKeywords(text: string): Promise<{
   const matches: string[] = []
 
   for (const keyword of keywords) {
+    const normalizedKeyword = normalizeText(keyword).trim()
+    if (!normalizedKeyword) continue
+    const literalKeyword = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     // Use word boundary regex to avoid false positives
     // Matches keyword at start/end or surrounded by non-alphanumeric chars
-    const pattern = new RegExp(`(^|[^a-z0-9])${keyword}([^a-z0-9]|$)`, 'i')
+    const pattern = new RegExp(`(^|[^a-z0-9])${literalKeyword}([^a-z0-9]|$)`, 'i')
     if (pattern.test(normalized)) {
       matches.push(keyword)
     }
@@ -97,14 +104,14 @@ export async function containsBannedKeywords(text: string): Promise<{
 /**
  * Validate content fields against banned keywords
  * Throws badRequest error if violations found
- * 
+ *
  * @param fields - Array of text fields to validate (null/undefined values are filtered out)
  * @throws {errors.badRequest} When banned keywords are detected
  */
 export async function validateContent(fields: (string | undefined | null)[]): Promise<void> {
   // Filter out empty values and join all text
   const allText = fields.filter(Boolean).join(' ')
-  
+
   // Skip validation if no content to check
   if (!allText.trim()) {
     return
@@ -115,7 +122,7 @@ export async function validateContent(fields: (string | undefined | null)[]): Pr
   if (result.found) {
     const displayMatches = result.matches.slice(0, 3).join(', ')
     const additional = result.matches.length > 3 ? ` (và ${result.matches.length - 3} từ khác)` : ''
-    
+
     logger.warn('Content validation failed - banned keywords detected:', {
       matchCount: result.matches.length,
       matches: result.matches,
@@ -132,6 +139,7 @@ export async function validateContent(fields: (string | undefined | null)[]): Pr
  * Called after admin adds/removes/updates keywords
  */
 export function clearKeywordCache(): void {
+  cacheRevision++
   keywordCache = null
   cacheExpiry = 0
   logger.info('Moderation keyword cache cleared')
@@ -146,13 +154,13 @@ export async function previewValidation(fields: (string | undefined | null)[]): 
   matches: string[]
 }> {
   const allText = fields.filter(Boolean).join(' ')
-  
+
   if (!allText.trim()) {
     return { valid: true, matches: [] }
   }
 
   const result = await containsBannedKeywords(allText)
-  
+
   return {
     valid: !result.found,
     matches: result.matches,

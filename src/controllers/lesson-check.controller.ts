@@ -36,3 +36,14 @@ export const checkLesson = async (req: AuthRequest, res: Response, next: NextFun
     next(error)
   }
 }
+
+export const checkLessonStep = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { lessonId, stepId } = req.params
+    const result = await lessonCheckService.checkLessonStep(lessonId, stepId, req.body.answer)
+
+    res.json({ success: true, data: keysToCamel(result) })
+  } catch (error) {
+    next(error)
+  }
+}

@@ -11,8 +11,9 @@ export const listAllSets = async (req: AuthRequest, res: Response, next: NextFun
     const result = await practiceService.listAllSets({
       languageId: req.query.languageId as string | undefined,
       difficulty: req.query.difficulty as 'easy' | 'medium' | 'hard' | undefined,
-      status: req.query.status as 'draft' | 'published' | undefined,
-      visibility: req.query.visibility as 'public' | 'private' | 'unlisted' | 'official' | undefined,
+      status: req.query.status as 'active' | 'draft' | 'published' | 'archived' | 'all' | undefined,
+      visibility: req.query.visibility as
+        'public' | 'private' | 'unlisted' | 'official' | undefined,
       createdBy: req.query.createdBy as string | undefined,
       limit: req.query.limit as number | undefined,
       offset: req.query.offset as number | undefined,
@@ -43,7 +44,7 @@ export const createSet = async (req: AuthRequest, res: Response, next: NextFunct
   try {
     const adminId = req.user!.id
     const result = await practiceService.createSet(
-      { ...req.body, visibility: 'official' },
+      { ...req.body, visibility: req.body.visibility ?? 'official' },
       adminId,
       true // isAdmin
     )
@@ -106,22 +107,26 @@ export const updateSet = async (req: AuthRequest, res: Response, next: NextFunct
 }
 
 /**
- * Delete practice set (admin can delete any set)
+ * Archive practice set (admin can archive any set without deleting attempts/submissions)
  */
 export const deleteSet = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const adminId = req.user!.id
     const setId = req.params.setId
 
-    // Get set info before deleting for audit log
+    // Get set info before archiving for audit log
     const set = await practiceService.getSetForAdmin(setId)
 
-    const result = await practiceService.deleteSetForAdmin(setId, adminId)
+    const result = await practiceService.deleteSetForAdmin(
+      setId,
+      adminId,
+      req.query.expectedStatus as string
+    )
 
     // Log action
     await AuditLogService.logAction({
       adminId,
-      action: 'delete',
+      action: 'archive',
       resourceType: 'practice_set',
       resourceId: setId,
       resourceName: set.title,
@@ -141,7 +146,7 @@ export const deleteSet = async (req: AuthRequest, res: Response, next: NextFunct
 }
 
 /**
- * Change practice set status (draft <-> published)
+ * Change practice set status (draft/published/archived)
  */
 export const updateStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -149,13 +154,18 @@ export const updateStatus = async (req: AuthRequest, res: Response, next: NextFu
     const setId = req.params.setId
     const { status } = req.body
 
-    if (!['draft', 'published'].includes(status)) {
+    if (!['draft', 'published', 'archived'].includes(status)) {
       res.status(400).json({ success: false, message: 'Invalid status' })
       return
     }
 
     const currentSet = await practiceService.getSetForAdmin(setId)
-    const result = await practiceService.updateSetStatus(setId, status, adminId)
+    const result = await practiceService.updateSetStatus(
+      setId,
+      status,
+      adminId,
+      req.body.expectedStatus
+    )
 
     // Log action
     await AuditLogService.logAction({
@@ -192,7 +202,12 @@ export const updateVisibility = async (req: AuthRequest, res: Response, next: Ne
     }
 
     const currentSet = await practiceService.getSetForAdmin(setId)
-    const result = await practiceService.updateSetVisibility(setId, visibility, adminId)
+    const result = await practiceService.updateSetVisibility(
+      setId,
+      visibility,
+      adminId,
+      req.body.expectedVisibility
+    )
 
     // Log action
     await AuditLogService.logAction({

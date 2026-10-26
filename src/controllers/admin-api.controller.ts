@@ -1,9 +1,12 @@
+import { authProviderFailure } from '../services/auth/provider-error'
 import { Response, NextFunction } from 'express'
 import { AuthRequest } from '../middleware/auth'
 import { supabaseAdmin } from '../db/supabase'
 import { createClient } from '@supabase/supabase-js'
 import { config } from '../config'
 import { logger } from '../utils/logger'
+import { discardFailedAdminSession, getAdminSessionCookieOptions } from '../utils/adminSession'
+import { assertSessionStoreReady, sessionStoreUnavailable } from '../services/admin-session-store'
 
 const supabase = createClient(config.supabase.url, config.supabase.anonKey)
 
@@ -11,7 +14,6 @@ declare module 'express-session' {
   interface SessionData {
     userId?: string
     userEmail?: string
-    accessToken?: string
   }
 }
 
@@ -44,6 +46,8 @@ export async function login(req: LoginRequest, res: Response, next: NextFunction
       return
     }
 
+    await assertSessionStoreReady()
+
     // Authenticate with Supabase
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -51,7 +55,8 @@ export async function login(req: LoginRequest, res: Response, next: NextFunction
     })
 
     if (error || !data.user) {
-      logger.error('Login failed - authentication error:', error)
+      const unavailable = authProviderFailure(error, 'AUTH_PROVIDER_UNAVAILABLE')
+      if (unavailable) throw unavailable
       res.status(401).json({
         success: false,
         message: 'Invalid email or password',
@@ -59,16 +64,12 @@ export async function login(req: LoginRequest, res: Response, next: NextFunction
       return
     }
 
-    logger.info(`User authenticated: ${data.user.id} (${data.user.email})`)
-
     // Check if user is admin
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .select('is_admin')
       .eq('id', data.user.id)
       .single()
-
-    logger.info('Profile query result:', { profile, error: profileError })
 
     if (profileError) {
       logger.error('Profile query error:', profileError)
@@ -91,11 +92,6 @@ export async function login(req: LoginRequest, res: Response, next: NextFunction
     // Check admin status
     const isAdmin = profile.is_admin === true
 
-    logger.info(`Admin check for ${data.user.email}:`, {
-      is_admin: profile.is_admin,
-      isAdmin,
-    })
-
     if (!isAdmin) {
       res.status(403).json({
         success: false,
@@ -104,10 +100,19 @@ export async function login(req: LoginRequest, res: Response, next: NextFunction
       return
     }
 
-    // Store user info in session
+    // Rotate the session after privilege elevation to prevent session fixation.
+    try {
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate(error => (error ? reject(error) : resolve()))
+      })
+    } catch {
+      discardFailedAdminSession(req, res)
+      throw sessionStoreUnavailable()
+    }
+
+    // Store user info in the new session, never in the pre-login session.
     req.session.userId = data.user.id
     req.session.userEmail = data.user.email || ''
-    req.session.accessToken = data.session?.access_token
 
     // Set session cookie options. Without "remember", keep it as a browser-session cookie.
     if (remember) {
@@ -118,31 +123,20 @@ export async function login(req: LoginRequest, res: Response, next: NextFunction
       req.session.cookie.originalMaxAge = null
     }
 
-    // Save session
-    req.session.save(err => {
-      if (err) {
-        logger.error('Session save error:', err)
-        res.status(500).json({
-          success: false,
-          message: 'Failed to create session',
-        })
-        return
-      }
-
-      logger.info(`Login successful for ${data.user.email}`)
-
-      // Return success response
-      res.json({
-        success: true,
-        user: {
-          id: data.user.id,
-          email: data.user.email,
-          role: 'admin',
-        },
+    try {
+      await new Promise<void>((resolve, reject) => {
+        req.session.save(error => (error ? reject(error) : resolve()))
       })
+    } catch {
+      discardFailedAdminSession(req, res)
+      throw sessionStoreUnavailable()
+    }
+
+    res.json({
+      success: true,
+      user: { id: data.user.id, email: data.user.email, role: 'admin' },
     })
   } catch (error) {
-    logger.error('Login error:', error)
     next(error)
   }
 }
@@ -153,6 +147,7 @@ export async function login(req: LoginRequest, res: Response, next: NextFunction
  */
 export async function logout(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
+    res.clearCookie('loopy.admin.sid', getAdminSessionCookieOptions())
     // Destroy session
     req.session.destroy(err => {
       if (err) {
@@ -162,9 +157,6 @@ export async function logout(req: AuthRequest, res: Response, next: NextFunction
         })
         return
       }
-
-      // Clear session cookie
-      res.clearCookie('loopy.admin.sid')
 
       res.json({
         success: true,

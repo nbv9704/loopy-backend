@@ -6,7 +6,7 @@ services:
     plan: free
     buildCommand: yarn install --frozen-lockfile && yarn build
     startCommand: yarn start
-    healthCheckPath: /api/health
+    healthCheckPath: /api/ready
     envVars:
       - key: NODE_ENV
         value: production
@@ -14,6 +14,8 @@ services:
         value: 22
       - key: PORT
         value: 3000
+      - key: API_URL
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
@@ -21,7 +23,7 @@ services:
       - key: SUPABASE_SERVICE_KEY
         sync: false
       - key: FRONTEND_URL
-        value: https://loopy.vercel.app
+        sync: false
       - key: CODE_EXECUTION_TIMEOUT
         value: 5000
       - key: MAX_CODE_LENGTH
@@ -35,7 +37,7 @@ services:
       - key: LOG_LEVEL
         value: info
       - key: SWAGGER_REQUIRE_AUTH
-        value: "true"
+        value: 'true'
       - key: ADMIN_SESSION_SECRET
         sync: false
       - key: REDIS_URL

@@ -28,13 +28,17 @@ Backend chịu trách nhiệm cho các luồng chính:
 
 ## Hướng dẫn cài đặt
 
-- Tiếng Việt: [INSTALL.vi.md](./INSTALL.vi.md)
-- English: [INSTALL.en.md](./INSTALL.en.md)
+- [Cài đặt và chạy local](./INSTALL.vi.md)
+
+Tài liệu nghiệp vụ và vận hành dùng chung tại [mục lục dự án](../docs/README.md); không duy trì bản sao audit/roadmap riêng trong repo app.
 
 ## Liên kết liên quan
 
 - Frontend app: `../loopy-frontend`
-- Tài liệu backend: [docs/README.md](./docs/README.md)
+- Thiết lập và giới hạn database: [database/README.md](./database/README.md)
+- Kiểm tra local: `yarn lint && yarn build && yarn test --runInBand`; Jest dùng cấu hình giả, không cần credentials thật.
+- SQL regression: `yarn test:db`; `yarn migrate` sau build chỉ in plan, không mở kết nối. Review [database/README.md](database/README.md) trước rollout migration pending; source local không tự cập nhật Supabase.
+- Preflight không kết nối ngoài: `yarn config:check`. Production template: `config/production.env.example`; bàn giao source: `../docs/RELEASE.md`.
 - License: [LICENSE](./LICENSE)
 
 ## License

@@ -59,6 +59,10 @@ class CacheService {
   clear(): void {
     this.cache.flushAll()
   }
+
+  close(): void {
+    this.cache.close()
+  }
 }
 
 // Export singleton instance

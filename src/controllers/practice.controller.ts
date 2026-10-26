@@ -59,7 +59,12 @@ export const createSet = async (req: AuthRequest, res: Response, next: NextFunct
 export const updateSet = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const isAdmin = await practiceService.checkIsAdmin(req.user!.id)
-    const result = await practiceService.updateSet(req.params.setId, req.body, req.user!.id, isAdmin)
+    const result = await practiceService.updateSet(
+      req.params.setId,
+      req.body,
+      req.user!.id,
+      isAdmin
+    )
     res.json({ success: true, data: result })
   } catch (error) {
     next(error)
@@ -68,7 +73,11 @@ export const updateSet = async (req: AuthRequest, res: Response, next: NextFunct
 
 export const deleteSet = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const result = await practiceService.deleteSet(req.params.setId, req.user!.id)
+    const result = await practiceService.deleteSet(
+      req.params.setId,
+      req.user!.id,
+      req.query.expectedStatus as string | undefined
+    )
     res.json(result)
   } catch (error) {
     next(error)

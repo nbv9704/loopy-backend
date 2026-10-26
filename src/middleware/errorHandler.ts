@@ -20,6 +20,27 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ) => {
+  const parserError = err as Error & { type?: string; status?: number }
+  if (
+    (parserError.type === 'entity.parse.failed' && parserError.status === 400) ||
+    (parserError.type === 'entity.too.large' && parserError.status === 413)
+  ) {
+    const tooLarge = parserError.status === 413
+    // Parser errors can include the submitted body in message/stack; do not log it.
+    logger.error('Rejected request payload', {
+      path: req.path,
+      method: req.method,
+      status: parserError.status,
+    })
+    return res.status(parserError.status).json({
+      success: false,
+      error: {
+        code: tooLarge ? 'PAYLOAD_TOO_LARGE' : 'INVALID_JSON',
+        message: tooLarge ? 'Request payload is too large' : 'Request body must contain valid JSON',
+      },
+    })
+  }
+
   // Log error
   logger.error('Error occurred:', {
     error: err.message,
@@ -64,5 +85,6 @@ export const errors = {
   databaseError: (message: string, details?: any) =>
     new AppError(500, 'DATABASE_ERROR', message, details),
   badRequest: (message: string) => new AppError(400, 'BAD_REQUEST', message),
-  unauthorized: (message: string = 'Unauthorized access') => new AppError(401, 'UNAUTHORIZED', message),
+  unauthorized: (message: string = 'Unauthorized access') =>
+    new AppError(401, 'UNAUTHORIZED', message),
 }

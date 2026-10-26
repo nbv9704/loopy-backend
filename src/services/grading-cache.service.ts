@@ -49,11 +49,15 @@ export class GradingCacheService {
    */
   private async initializeRedis(redisUrl: string): Promise<void> {
     try {
-      this.redisClient = createClient({ 
+      this.redisClient = createClient({
         url: redisUrl,
-        socket: redisUrl.startsWith('rediss://') 
-          ? { connectTimeout: 30000, tls: true, rejectUnauthorized: process.env.REDIS_REJECT_UNAUTHORIZED !== 'false' }
-          : { connectTimeout: 30000 }
+        socket: redisUrl.startsWith('rediss://')
+          ? {
+              connectTimeout: 30000,
+              tls: true,
+              rejectUnauthorized: process.env.REDIS_REJECT_UNAUTHORIZED !== 'false',
+            }
+          : { connectTimeout: 30000 },
       })
 
       this.redisClient.on('error', err => {
@@ -84,7 +88,7 @@ export class GradingCacheService {
    * @returns SHA-256 hash of the combined content
    */
   generateCacheKey(code: string, exerciseId: string, language: string): string {
-    const content = `${code}:${exerciseId}:${language}`
+    const content = JSON.stringify([code, exerciseId, language])
     const hash = crypto.createHash('sha256').update(content).digest('hex')
     return `ai-grade:${hash}`
   }
@@ -93,7 +97,13 @@ export class GradingCacheService {
    * Validate key to prevent prototype pollution or invalid keys
    */
   private isValidKey(key: string): boolean {
-    if (!key || typeof key !== 'string' || key === '__proto__' || key === 'constructor' || key === 'prototype') {
+    if (
+      !key ||
+      typeof key !== 'string' ||
+      key === '__proto__' ||
+      key === 'constructor' ||
+      key === 'prototype'
+    ) {
       return false
     }
     return true
@@ -108,8 +118,8 @@ export class GradingCacheService {
    * @returns The cached value or null if not found
    */
   async get(key: string): Promise<any | null> {
-    if (!this.isValidKey(key)) return null;
-    
+    if (!this.isValidKey(key)) return null
+
     try {
       // Try Redis first if available
       if (this.redisClient?.isOpen) {
@@ -146,7 +156,7 @@ export class GradingCacheService {
    * @param ttl - Time to live in seconds (defaults to 3600)
    */
   async set(key: string, value: any, ttl: number = this.DEFAULT_TTL): Promise<void> {
-    if (!this.isValidKey(key)) return;
+    if (!this.isValidKey(key)) return
 
     try {
       // Store in Redis if available
@@ -169,7 +179,7 @@ export class GradingCacheService {
    * @param key - Cache key to delete
    */
   async delete(key: string): Promise<void> {
-    if (!this.isValidKey(key)) return;
+    if (!this.isValidKey(key)) return
 
     try {
       // Delete from Redis if available
@@ -239,8 +249,11 @@ export class GradingCacheService {
    * Should be called when shutting down the application
    */
   async disconnect(): Promise<void> {
-    if (this.redisClient?.isOpen) {
+    this.nodeCache.close()
+    if (this.redisClient?.isReady) {
       await this.redisClient.quit()
+    } else if (this.redisClient?.isOpen) {
+      this.redisClient.destroy()
     }
   }
 

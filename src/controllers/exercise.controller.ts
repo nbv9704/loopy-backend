@@ -3,7 +3,7 @@ import { supabaseAdmin } from '../db/supabase'
 import { AuthRequest } from '../middleware/auth'
 import { errors } from '../middleware/errorHandler'
 import { keysToCamel } from '../utils/caseConverter'
-import { executeCode as executeCodeService } from '../services/codeExecution.service'
+import { lessonCheckService } from '../services/lesson-check.service'
 
 export const submitExercise = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -11,47 +11,27 @@ export const submitExercise = async (req: AuthRequest, res: Response, next: Next
     const { id: exerciseId } = req.params
     const { code } = req.body
 
-    // Map exerciseId to lesson_id
     const { data: lesson, error: lessonError } = await supabaseAdmin
       .from('lessons')
-      .select('*, chapters(languages(*))')
+      .select('id, chapters(languages(id))')
       .eq('id', exerciseId)
+      .eq('status', 'published')
       .single()
 
     if (lessonError || !lesson) {
       throw errors.notFound('Exercise/Lesson')
     }
 
-    // Execute code and validate
-    const startTime = Date.now()
-    let isCorrect = false
-    let output = ''
-    let error = null
+    const language = ((lesson.chapters as any)?.languages?.id as string | undefined) || 'javascript'
+    const result = await lessonCheckService.checkLesson(exerciseId, userId, code, language)
 
-    try {
-      const language = (lesson.chapters as any).languages.id
-
-      const result = await executeCodeService(language, code)
-      output = result.output
-      error = result.error
-      isCorrect = !result.error
-    } catch (err: any) {
-      error = err.message
-    }
-
-    const executionTime = Date.now() - startTime
-
-    // Save submission mapping to lesson_submissions
     const { data: submission, error: submissionError } = await supabaseAdmin
       .from('lesson_submissions')
-      .insert({
-        user_id: userId,
-        lesson_id: exerciseId,
-        code,
-        is_correct: isCorrect,
-        execution_time: executionTime,
-      })
-      .select()
+      .select('id, code, is_correct, submitted_at, execution_time, test_score, final_score, grading_method')
+      .eq('user_id', userId)
+      .eq('lesson_id', exerciseId)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
       .single()
 
     if (submissionError) throw submissionError
@@ -61,10 +41,12 @@ export const submitExercise = async (req: AuthRequest, res: Response, next: Next
       data: keysToCamel({
         submission,
         result: {
-          isCorrect,
-          output,
-          error,
-          executionTime,
+          isCorrect: result.passed,
+          output: result.output,
+          error: result.hint,
+          executionTime: submission.execution_time,
+          score: result.score,
+          checks: result.checks,
         },
       }),
     })
@@ -77,6 +59,17 @@ export const getSubmissions = async (req: AuthRequest, res: Response, next: Next
   try {
     const userId = req.user!.id
     const { id: exerciseId } = req.params
+
+    const { data: lesson, error: lessonError } = await supabaseAdmin
+      .from('lessons')
+      .select('id')
+      .eq('id', exerciseId)
+      .eq('status', 'published')
+      .single()
+
+    if (lessonError || !lesson) {
+      throw errors.notFound('Exercise/Lesson')
+    }
 
     const { data, error } = await supabaseAdmin
       .from('lesson_submissions')

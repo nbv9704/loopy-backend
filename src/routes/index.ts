@@ -15,7 +15,7 @@ import practiceRoutes from './practice.routes'
 import pathRoutes from './path.routes'
 import publicRoutes from './public.routes'
 import moderationRoutes from './moderation.routes'
-import { healthCheck } from '../controllers/health.controller'
+import { healthCheck, readinessCheck } from '../controllers/health.controller'
 
 /**
  * Centralized route aggregation
@@ -26,6 +26,7 @@ const router = Router()
 
 // Health check
 router.get('/health', healthCheck)
+router.get('/ready', readinessCheck)
 
 // Public API routes
 router.use('/auth', authRoutes)
@@ -57,7 +58,7 @@ router.use('/admin-auth', adminApiRoutes)
 // Admin moderation routes
 router.use('/admin/moderation', moderationRoutes)
 
-// Admin API routes (Bearer token-based)
+// Admin API routes (session-based)
 router.use('/admin', adminRoutes)
 
 export default router

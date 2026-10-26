@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { pvpMatchReference } from './pvp-values'
 
 /**
  * PvP System Validation Schemas
@@ -25,24 +26,24 @@ export const pvpSchemas = {
   // Join match
   joinMatch: z.object({
     params: z.object({
-      matchId: z.string().min(6, 'Invalid match ID or room code'),
+      matchId: pvpMatchReference,
     }),
   }),
 
   // Get match details
   getMatch: z.object({
     params: z.object({
-      matchId: z.string().min(6, 'Invalid match ID or room code'),
+      matchId: pvpMatchReference,
     }),
   }),
 
   // Submit answer (multiple choice)
   submitAnswer: z.object({
     params: z.object({
-      matchId: z.string().uuid('Invalid match ID'),
+      matchId: z.guid('Invalid match ID'),
     }),
     body: z.object({
-      question_id: z.string().uuid('Invalid question ID'),
+      question_id: z.guid('Invalid question ID'),
       selected_answer: z.string().min(1, 'Answer is required'),
     }),
   }),
@@ -50,10 +51,10 @@ export const pvpSchemas = {
   // Submit code
   submitCode: z.object({
     params: z.object({
-      matchId: z.string().uuid('Invalid match ID'),
+      matchId: z.guid('Invalid match ID'),
     }),
     body: z.object({
-      question_id: z.string().uuid('Invalid question ID'),
+      question_id: z.guid('Invalid question ID'),
       code: z.string().min(1, 'Code is required').max(10000, 'Code is too long'),
     }),
   }),
@@ -66,20 +67,20 @@ export const pvpSchemas = {
         .transform(Number)
         .pipe(z.number().int().positive().max(100))
         .optional()
-        .default('10'),
+        .prefault('10'),
       offset: z
         .string()
         .transform(Number)
         .pipe(z.number().int().nonnegative())
         .optional()
-        .default('0'),
+        .prefault('0'),
     }),
   }),
 
   // Get user stats
   getUserStats: z.object({
     params: z.object({
-      userId: z.string().uuid('Invalid user ID').optional(),
+      userId: z.guid('Invalid user ID').optional(),
     }),
   }),
 
@@ -91,7 +92,7 @@ export const pvpSchemas = {
         .transform(Number)
         .pipe(z.number().int().positive().max(100))
         .optional()
-        .default('50'),
+        .prefault('50'),
       sort_by: z.enum(['rating', 'matches_won', 'accuracy_rate']).optional().default('rating'),
     }),
   }),
@@ -108,11 +109,11 @@ export const pvpSchemas = {
   // Send reaction
   sendReaction: z.object({
     params: z.object({
-      matchId: z.string().uuid('Invalid match ID'),
+      matchId: z.guid('Invalid match ID'),
     }),
     body: z.object({
       emoji: z.string().min(1).max(10),
-      target_user_id: z.string().uuid('Invalid user ID').optional(),
+      target_user_id: z.guid('Invalid user ID').optional(),
     }),
   }),
 
@@ -190,7 +191,7 @@ export const pvpSchemas = {
   // Admin: Update question
   updateQuestion: z.object({
     params: z.object({
-      questionId: z.string().uuid('Invalid question ID'),
+      questionId: z.guid('Invalid question ID'),
     }),
     body: z.object({
       question_text: z.string().optional(),
@@ -224,7 +225,7 @@ export const pvpSchemas = {
   // Admin: Delete question
   deleteQuestion: z.object({
     params: z.object({
-      questionId: z.string().uuid('Invalid question ID'),
+      questionId: z.guid('Invalid question ID'),
     }),
   }),
 }

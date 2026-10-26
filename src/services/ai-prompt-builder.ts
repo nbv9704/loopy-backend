@@ -33,6 +33,7 @@ export function buildGradingPrompt(params: AIAnalysisParams): string {
 Bài: ${params.exerciseTitle}
 `
 
+  if (params.exerciseQuestion) p += `Yêu cầu bài học:\n${params.exerciseQuestion}\n`
   if (params.lessonInsight) p += `Trọng tâm: ${params.lessonInsight}\n`
 
   // Exercise instructions
@@ -80,11 +81,13 @@ JSON (không markdown):
  */
 export function buildHintPrompt(params: AIAnalysisParams): string {
   let p = `Bạn là một giáo viên dạy lập trình cực kỳ hiền lành và kiên nhẫn.
+Ngôn ngữ lập trình: ${params.language}
 Học sinh đang gặp khó khăn ở bài tập: ${params.exerciseTitle}
 `
+  if (params.exerciseQuestion) p += `Yêu cầu bài học:\n${params.exerciseQuestion}\n`
   if (params.lessonInsight) p += `Trọng tâm bài học: ${params.lessonInsight}\n`
   if (params.starterCode) p += `\nĐỀ BÀI (Code ban đầu):\n${params.starterCode}\n`
-  
+
   p += `\nCODE CỦA HỌC SINH HIỆN TẠI:\n${params.code}\n`
 
   if (params.outputLogs) {

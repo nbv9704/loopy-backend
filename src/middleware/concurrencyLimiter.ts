@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { logger } from '../utils/logger'
 
 let activeExecutions = 0
-const MAX_CONCURRENT_EXECUTIONS = 5 // Max concurrent code executions system-wide
+const MAX_CONCURRENT_EXECUTIONS = 5 // Open HTTP request budget; execution/gate separately limits actual per-process jobs
 
 export const concurrencyLimiter = (_req: Request, res: Response, next: NextFunction): void => {
   if (activeExecutions >= MAX_CONCURRENT_EXECUTIONS) {
@@ -18,7 +18,7 @@ export const concurrencyLimiter = (_req: Request, res: Response, next: NextFunct
   }
 
   activeExecutions++
-  
+
   let finished = false
   const cleanup = () => {
     if (!finished) {
@@ -29,7 +29,7 @@ export const concurrencyLimiter = (_req: Request, res: Response, next: NextFunct
 
   res.on('finish', cleanup)
   res.on('close', cleanup)
-  
+
   next()
 }
 
@@ -37,4 +37,3 @@ export const concurrencyLimiter = (_req: Request, res: Response, next: NextFunct
 export const resetActiveExecutions = (): void => {
   activeExecutions = 0
 }
-

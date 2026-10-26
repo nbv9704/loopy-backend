@@ -2,8 +2,9 @@ import { Request, Response, NextFunction } from 'express'
 import { supabaseAdmin } from '../db/supabase'
 import { AuthRequest } from '../middleware/auth'
 import { errors } from '../middleware/errorHandler'
-import { keysToCamel, keysToSnake } from '../utils/caseConverter'
-import { validateContent } from '../utils/contentModeration'
+import { keysToCamel } from '../utils/caseConverter'
+import { getFreshUserStreak } from '../services/progress.service'
+import { saveProfileUpdate } from '../services/profile/update-profile'
 
 export const getMyProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -13,26 +14,20 @@ export const getMyProfile = async (req: AuthRequest, res: Response, next: NextFu
       .from('user_profiles')
       .select('*')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
-      throw errors.notFound('Profile')
-    }
+    if (error) throw errors.databaseError('Không đọc được hồ sơ. Vui lòng thử lại.')
+    if (!data) throw errors.notFound('Profile')
 
-    // Get user streak
-    const { data: streak } = await supabaseAdmin
-      .from('user_streaks')
-      .select('current_streak, longest_streak')
-      .eq('user_id', userId)
-      .single()
+    const streak = await getFreshUserStreak(userId)
 
     res.json({
       success: true,
       data: keysToCamel({
         profile: {
           ...data,
-          current_streak: streak?.current_streak || 0,
-          longest_streak: streak?.longest_streak || 0,
+          current_streak: streak.current_streak,
+          longest_streak: streak.longest_streak,
         },
       }),
     })
@@ -43,28 +38,7 @@ export const getMyProfile = async (req: AuthRequest, res: Response, next: NextFu
 
 export const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.id
-    
-    // Validate displayName and bio for banned keywords
-    await validateContent([
-      req.body.displayName,
-      req.body.bio,
-    ])
-    
-    const updateBody = { ...req.body }
-    if (updateBody.learningGoal && !updateBody.learningPath) {
-      updateBody.learningPath = updateBody.learningGoal
-    }
-    delete updateBody.learningGoal
-    
-    const { data, error } = await supabaseAdmin
-      .from('user_profiles')
-      .update(keysToSnake(updateBody))
-      .eq('id', userId)
-      .select()
-      .single()
-
-    if (error) throw error
+    const data = await saveProfileUpdate(req.user!.id, req.body)
 
     res.json({
       success: true,
@@ -85,11 +59,10 @@ export const getPublicProfile = async (req: Request, res: Response, next: NextFu
       .from('user_profiles')
       .select('id, display_name, avatar_url, bio, created_at')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
-      throw errors.notFound('Profile')
-    }
+    if (error) throw errors.databaseError('Không đọc được hồ sơ. Vui lòng thử lại.')
+    if (!data) throw errors.notFound('Profile')
 
     res.json({
       success: true,

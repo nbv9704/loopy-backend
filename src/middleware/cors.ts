@@ -1,20 +1,10 @@
 import cors from 'cors'
-import { config } from '../config'
+import { getAllowedOrigins } from '../utils/origins'
 
 /**
  * Centralized CORS configuration
  * Extracted from index.ts to follow Single Responsibility Principle
  */
-const getEnvAllowedOrigins = () => {
-  const envOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []
-  return [
-    config.frontendUrl,
-    'https://loopy.vercel.app',
-    'https://loopy-frontend-blond.vercel.app',
-    ...envOrigins
-  ].map(o => o.trim()).filter(Boolean)
-}
-
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
     // Allow no-origin requests (e.g. server-to-server, health checks, Postman)
@@ -22,7 +12,7 @@ export const corsMiddleware = cors({
       return callback(null, true)
     }
 
-    const allowedOrigins = getEnvAllowedOrigins()
+    const allowedOrigins = getAllowedOrigins()
     
     // Check if origin is EXACTLY allowed in the whitelist
     const isAllowed = allowedOrigins.includes(origin)

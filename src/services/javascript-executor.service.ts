@@ -1,3 +1,4 @@
+import { decodeIsolateValue, resultSerializerSource } from './execution/serialized-value'
 /**
  * JavaScriptExecutor Service for Auto-Grading System
  *
@@ -15,6 +16,9 @@
  */
 
 import ivm from 'isolated-vm'
+import { executionGate } from './execution/gate'
+import { CapturedOutput } from './execution/captured-output'
+import { RunnerUnavailableError } from './execution/errors'
 import type { ExecutionResult } from './grading.types'
 
 /**
@@ -32,9 +36,18 @@ export class JavaScriptExecutor {
    * @returns ExecutionResult with output, stdout, stderr, and execution metadata
    */
   async execute(code: string, input: any = null, timeout: number = 5000): Promise<ExecutionResult> {
+    return executionGate.run(() => this.executeJob(code, input, timeout))
+  }
+
+  private async executeJob(
+    code: string,
+    input: unknown,
+    timeout: number
+  ): Promise<ExecutionResult> {
     const startTime = Date.now()
-    const stdoutLines: string[] = []
-    const stderrLines: string[] = []
+    const stdout = new CapturedOutput()
+    const stderr = new CapturedOutput()
+    let isolate: ivm.Isolate | undefined
 
     try {
       // Validate inputs
@@ -49,7 +62,7 @@ export class JavaScriptExecutor {
         }
       }
 
-      if (timeout <= 0) {
+      if (!Number.isInteger(timeout) || timeout <= 0 || timeout > 60000) {
         return {
           output: null,
           stdout: '',
@@ -61,36 +74,15 @@ export class JavaScriptExecutor {
       }
 
       // Create sandbox using isolated-vm
-      const isolate = new ivm.Isolate({ memoryLimit: this.memoryLimit / (1024 * 1024) })
+      isolate = new ivm.Isolate({ memoryLimit: this.memoryLimit / (1024 * 1024) })
       const context = isolate.createContextSync()
       const jail = context.global
       jail.setSync('global', jail.derefInto())
 
-      // Set up console capturing with limits to prevent OOM
-      const MAX_LOG_LINES = 1000;
-      const MAX_LOG_LENGTH = 5000;
-
-      const logCallback = function(str: string) {
-        if (stdoutLines.length < MAX_LOG_LINES) {
-          stdoutLines.push(str.substring(0, MAX_LOG_LENGTH))
-        } else if (stdoutLines.length === MAX_LOG_LINES) {
-          stdoutLines.push('...[Output truncated due to limit]')
-        }
-      }
-      const errorCallback = function(str: string) {
-        if (stderrLines.length < MAX_LOG_LINES) {
-          stderrLines.push(str.substring(0, MAX_LOG_LENGTH))
-        } else if (stderrLines.length === MAX_LOG_LINES) {
-          stderrLines.push('...[Error truncated due to limit]')
-        }
-      }
-      const warnCallback = function(str: string) {
-        if (stderrLines.length < MAX_LOG_LINES) {
-          stderrLines.push('Warning: ' + str.substring(0, MAX_LOG_LENGTH))
-        } else if (stderrLines.length === MAX_LOG_LINES) {
-          stderrLines.push('...[Warning truncated due to limit]')
-        }
-      }
+      // Limit each copied console message in the isolate before crossing into the host.
+      const logCallback = (value: unknown) => stdout.write(value)
+      const errorCallback = (value: unknown) => stderr.write(value)
+      const warnCallback = (value: unknown) => stderr.write(value, 'Warning: ')
 
       jail.setSync('_logCallback', new ivm.Reference(logCallback))
       jail.setSync('_errorCallback', new ivm.Reference(errorCallback))
@@ -106,67 +98,50 @@ export class JavaScriptExecutor {
         }
       }
 
-      context.evalSync(`
+      context.evalSync(
+        `
         ${inputCode}
-        global.console = {
-          log: (...args) => {
-            const serialized = args.map(arg => {
-              if (typeof arg === 'object' && arg !== null) {
-                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
-              }
-              return String(arg);
-            });
-            _logCallback.applySync(undefined, [serialized.join(' ')]);
-          },
-          error: (...args) => {
-            const serialized = args.map(arg => {
-              if (typeof arg === 'object' && arg !== null) {
-                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
-              }
-              return String(arg);
-            });
-            _errorCallback.applySync(undefined, [serialized.join(' ')]);
-          },
-          warn: (...args) => {
-            const serialized = args.map(arg => {
-              if (typeof arg === 'object' && arg !== null) {
-                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
-              }
-              return String(arg);
-            });
-            _warnCallback.applySync(undefined, [serialized.join(' ')]);
-          },
-          info: (...args) => {
-            const serialized = args.map(arg => {
-              if (typeof arg === 'object' && arg !== null) {
-                try { return JSON.stringify(arg); } catch(e) { return String(arg); }
-              }
-              return String(arg);
-            });
-            _logCallback.applySync(undefined, [serialized.join(' ')]);
-          }
-        };
-      `)
+        global.console = (() => {
+          const log = _logCallback, error = _errorCallback, warn = _warnCallback;
+          delete global._logCallback;
+          delete global._errorCallback;
+          delete global._warnCallback;
+          const format = args => args.map(arg => {
+            if (typeof arg === 'object' && arg !== null) {
+              try { return JSON.stringify(arg); } catch { return String(arg); }
+            }
+            return String(arg);
+          }).join(' ').slice(0, 5001);
+          return {
+            log: (...args) => log.applySync(undefined, [format(args)]),
+            info: (...args) => log.applySync(undefined, [format(args)]),
+            error: (...args) => error.applySync(undefined, [format(args)]),
+            warn: (...args) => warn.applySync(undefined, [format(args)])
+          };
+        })();
+      `,
+        { timeout }
+      )
+      // Serialize inside the isolate with a captured intrinsic and a size limit before copying.
+      const serialize = context.evalSync(resultSerializerSource, { reference: true, timeout })
 
       let output: any
       try {
         const script = await isolate.compileScript(code)
         const result = await script.run(context, { timeout, reference: true })
 
-        if (result && typeof result === 'object' && typeof result.copySync === 'function') {
-          output = result.copySync()
-        } else {
-          output = result
-        }
+        const json = await serialize.apply(undefined, [result.derefInto()], { timeout })
+        if (typeof json !== 'string') throw new Error('Invalid serialized result')
+        output = decodeIsolateValue(json)
       } catch (vmError: any) {
-        const errorMessage = vmError.message || String(vmError)
+        const errorMessage = String(vmError.message || vmError).slice(0, 5000)
 
         // Check if it's a timeout error
         if (errorMessage.includes('Script execution timed out')) {
           return {
             output: null,
-            stdout: stdoutLines.join('\n'),
-            stderr: stderrLines.join('\n'),
+            stdout: stdout.text(),
+            stderr: stderr.text(),
             exitCode: 124, // Standard timeout exit code
             executionTime: timeout,
             error: `Execution exceeded timeout of ${timeout}ms`,
@@ -177,7 +152,7 @@ export class JavaScriptExecutor {
         if (errorMessage.includes('SyntaxError') || vmError.name === 'SyntaxError') {
           return {
             output: null,
-            stdout: stdoutLines.join('\n'),
+            stdout: stdout.text(),
             stderr: errorMessage,
             exitCode: 1,
             executionTime: Date.now() - startTime,
@@ -188,40 +163,39 @@ export class JavaScriptExecutor {
         // Runtime error
         return {
           output: null,
-          stdout: stdoutLines.join('\n'),
+          stdout: stdout.text(),
           stderr: errorMessage,
           exitCode: 1,
           executionTime: Date.now() - startTime,
           error: errorMessage,
         }
-      } finally {
-        isolate.dispose()
       }
+
+      if (stdout.truncated || stderr.truncated)
+        return {
+          output: null,
+          stdout: stdout.text(),
+          stderr: stderr.text(),
+          exitCode: 1,
+          executionTime: Date.now() - startTime,
+          error: 'Output limit exceeded',
+        }
 
       // Successful execution
       return {
         output,
-        stdout: stdoutLines.join('\n'),
-        stderr: stderrLines.join('\n'),
+        stdout: stdout.text(),
+        stderr: stderr.text(),
         exitCode: 0,
         executionTime: Date.now() - startTime,
         error: null,
       }
-    } catch (error: any) {
-      // Catch any unexpected errors
-      const errorMessage = error.message || String(error)
-
-      return {
-        output: null,
-        stdout: stdoutLines.join('\n'),
-        stderr: errorMessage,
-        exitCode: 1,
-        executionTime: Date.now() - startTime,
-        error: `Unexpected error: ${errorMessage}`,
-      }
+    } catch {
+      throw new RunnerUnavailableError()
+    } finally {
+      if (isolate && !isolate.isDisposed) isolate.dispose()
     }
   }
-
 }
 
 /**

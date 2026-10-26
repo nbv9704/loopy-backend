@@ -2,6 +2,7 @@ import { Router } from 'express'
 import * as authController from '../controllers/auth.controller'
 import { validate } from '../middleware/validate'
 import { authSchemas } from '../schemas/auth.schemas'
+import { isDevLoginEnabled } from '../utils/development'
 
 const router = Router()
 
@@ -357,7 +358,7 @@ router.post('/refresh', authController.refreshToken)
 // ============================================================================
 // DEV-ONLY: Quick login with auto-created test account
 // ============================================================================
-if (process.env.NODE_ENV === 'development') {
+if (isDevLoginEnabled()) {
   router.post('/dev-login', async (_req, res, next) => {
     try {
       const { supabase: sb, supabaseAdmin: sbAdmin } = await import('../db/supabase')

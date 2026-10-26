@@ -5,8 +5,10 @@ import {
   getPublicContent,
   getPublicContentBatch,
   getPublicContentByKey,
-} from '../controllers/admin/content.controller'
+} from '../controllers/content.controller'
 import { loadKeywords } from '../utils/contentModeration'
+import { validate } from '../middleware/validate'
+import { publicSchemas } from '../schemas/public.schemas'
 
 const router = Router()
 
@@ -19,8 +21,9 @@ router.get('/sample-lesson', async (_req, res, next) => {
     // We'll pick one from JavaScript as it's the most common for web
     const { data, error } = await supabaseAdmin
       .from('lessons')
-      .select('id, title, description, starter_code, task_description, is_aha_lesson, chapters(language_id)')
+      .select('id, title, description, starter_code, task_description, is_aha_lesson, chapters!inner(language_id)')
       .eq('is_aha_lesson', true)
+      .eq('status', 'published')
       .eq('chapters.language_id', 'javascript')
       .order('order_index')
       .limit(1)
@@ -45,19 +48,19 @@ router.get('/sample-lesson', async (_req, res, next) => {
  * GET /api/public/content
  * Get public content items with optional filtering
  */
-router.get('/content', getPublicContent)
+router.get('/content', validate(publicSchemas.contentQuery), getPublicContent)
 
 /**
  * POST /api/public/content/batch
  * Get multiple public content items by exact keys
  */
-router.post('/content/batch', getPublicContentBatch)
+router.post('/content/batch', validate(publicSchemas.contentBatch), getPublicContentBatch)
 
 /**
  * GET /api/public/content/:key
  * Get a specific content item by key
  */
-router.get('/content/:key', getPublicContentByKey)
+router.get('/content/:key', validate(publicSchemas.contentKey), getPublicContentByKey)
 
 /**
  * GET /api/public/moderation/keywords

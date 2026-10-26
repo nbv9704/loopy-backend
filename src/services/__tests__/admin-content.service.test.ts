@@ -1,630 +1,376 @@
 import { AdminContentService } from '../admin-content.service'
 import { supabaseAdmin } from '../../db/supabase'
+import { AuditLogService } from '../audit-log.service'
 
-/**
- * AdminContentService Unit Tests
- *
- * Tests all CRUD operations and utility methods for content management.
- * Validates error handling and data transformation.
- */
+jest.mock('../../db/supabase', () => ({ supabaseAdmin: { from: jest.fn(), rpc: jest.fn() } }))
+jest.mock('../../utils/logger', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}))
+jest.mock('../audit-log.service', () => ({
+  AuditLogService: { logAction: jest.fn().mockResolvedValue(undefined) },
+}))
 
-describe('AdminContentService', () => {
-  const testAdminId = undefined as unknown as string
+// Stub query responses, not database behavior. No network, inserts, or cleanup on a real DB.
+const fromMock = supabaseAdmin.from as jest.Mock
+const row = {
+  id: 'item-1',
+  category_id: '11111111-1111-4111-8111-111111111111',
+  key: 'test.title',
+  language: 'vi',
+  revision: 0,
+  value: 'Nội dung',
+  description: 'Description',
+  type: 'text',
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-02T00:00:00Z',
+  created_by: 'admin-1',
+  updated_by: 'admin-1',
+}
+const category = {
+  id: '11111111-1111-4111-8111-111111111111',
+  name: 'test',
+  display_order: 1,
+  created_at: row.created_at,
+  updated_at: row.updated_at,
+}
+const input = { categoryId: category.id, key: row.key, language: 'vi' as const, value: row.value }
+const dbFailure = { message: 'database unavailable' }
 
-  beforeAll(async () => {
-    // Setup: Create test category if it doesn't exist
-    const { data: categories } = await supabaseAdmin
-      .from('content_categories')
-      .select('id')
-      .eq('name', 'test')
-      .single()
+function queueQuery(data: unknown = null, error: unknown = null, count = 0) {
+  const response = { data, error, count }
+  const query = {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    in: jest.fn().mockReturnThis(),
+    or: jest.fn().mockReturnThis(),
+    order: jest.fn().mockReturnThis(),
+    range: jest.fn().mockReturnThis(),
+    insert: jest.fn().mockReturnThis(),
+    update: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    delete: jest.fn().mockReturnThis(),
+    maybeSingle: jest.fn().mockResolvedValue(response),
+    single: jest.fn().mockResolvedValue(response),
+    then: (resolve: (value: typeof response) => unknown) => Promise.resolve(response).then(resolve),
+  }
+  fromMock.mockReturnValueOnce(query)
+  return query
+}
 
-    if (!categories) {
-      await supabaseAdmin.from('content_categories').insert({
-        name: 'test',
-        description: 'Test category',
-        display_order: 999,
-      })
-    }
-  })
+function mockImportResult(result: unknown) {
+  jest
+    .mocked(supabaseAdmin.rpc)
+    .mockImplementation(
+      name =>
+        Promise.resolve(
+          name === 'loopy_schema_status' ? { data: { cms: true }, error: null } : result
+        ) as never
+    )
+}
 
-  afterAll(async () => {
-    // Cleanup: Delete test content items
-    await supabaseAdmin.from('content_items').delete().like('key', 'test.%')
+describe('AdminContentService (isolated unit tests)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    fromMock.mockReset()
+    jest
+      .mocked(supabaseAdmin.rpc)
+      .mockReset()
+      .mockResolvedValue({ data: { cms: true }, error: null } as never)
   })
 
   describe('getContentItems', () => {
-    it('should return empty array when no items exist', async () => {
-      // Pass undefined for category to get all items, then filter
-      const result = await AdminContentService.getContentItems(undefined)
-      expect(Array.isArray(result.items)).toBe(true)
-      expect(typeof result.total).toBe('number')
-    })
-
-    it('should return content items with pagination', async () => {
-      // Create test items
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        await supabaseAdmin.from('content_items').insert([
-          {
-            category_id: category.id,
-            key: 'test.item1',
-            language: 'vi',
-            value: 'Test Item 1',
-            type: 'text',
-            created_by: testAdminId,
-            updated_by: testAdminId,
-          },
-          {
-            category_id: category.id,
-            key: 'test.item2',
-            language: 'vi',
-            value: 'Test Item 2',
-            type: 'text',
-            created_by: testAdminId,
-            updated_by: testAdminId,
-          },
-        ])
-      }
-
-      const result = await AdminContentService.getContentItems(category?.id, 'vi')
-      expect(result.items.length).toBeGreaterThan(0)
-      expect(result.total).toBeGreaterThan(0)
-      expect(result.items[0]).toHaveProperty('id')
-      expect(result.items[0]).toHaveProperty('categoryId')
-      expect(result.items[0]).toHaveProperty('key')
-      expect(result.items[0]).toHaveProperty('language')
-      expect(result.items[0]).toHaveProperty('value')
-
-      // Cleanup
-      await supabaseAdmin.from('content_items').delete().eq('key', 'test.item1')
-      await supabaseAdmin.from('content_items').delete().eq('key', 'test.item2')
-    })
-
-    it('should filter by language', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        await supabaseAdmin.from('content_items').insert({
-          category_id: category.id,
-          key: 'test.lang',
-          language: 'en',
-          value: 'Test Language',
-          type: 'text',
-          created_by: testAdminId,
-          updated_by: testAdminId,
-        })
-      }
-
-      const result = await AdminContentService.getContentItems(category?.id, 'en')
-      const enItems = result.items.filter((item) => item.language === 'en')
-      expect(enItems.length).toBeGreaterThan(0)
-
-      // Cleanup
-      await supabaseAdmin.from('content_items').delete().eq('key', 'test.lang')
-    })
-
-    it('should search by key or value', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        await supabaseAdmin.from('content_items').insert({
-          category_id: category.id,
-          key: 'test.search',
-          language: 'vi',
-          value: 'Searchable Content',
-          type: 'text',
-          created_by: testAdminId,
-          updated_by: testAdminId,
-        })
-      }
-
-      const result = await AdminContentService.getContentItems(category?.id, undefined, 'search')
-      expect(result.items.length).toBeGreaterThan(0)
-      expect(result.items.some((item) => item.key.includes('search'))).toBe(true)
-
-      // Cleanup
-      await supabaseAdmin.from('content_items').delete().eq('key', 'test.search')
-    })
-
-    it('should respect limit and offset', async () => {
-      const result1 = await AdminContentService.getContentItems(undefined, undefined, undefined, 1, 0)
-      const result2 = await AdminContentService.getContentItems(undefined, undefined, undefined, 1, 1)
-
-      if (result1.items.length > 0 && result2.items.length > 0) {
-        expect(result1.items[0].id).not.toBe(result2.items[0].id)
-      }
-    })
-  })
-
-  describe('getContentItemsByKeys', () => {
-    it('should return exact key/value map and missing keys for a language', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        await supabaseAdmin.from('content_items').insert([
-          {
-            category_id: category.id,
-            key: 'test.batch.one',
-            language: 'vi',
-            value: 'Batch One',
-            type: 'text',
-            created_by: testAdminId,
-            updated_by: testAdminId,
-          },
-          {
-            category_id: category.id,
-            key: 'test.batch.two',
-            language: 'vi',
-            value: 'Batch Two',
-            type: 'text',
-            created_by: testAdminId,
-            updated_by: testAdminId,
-          },
-          {
-            category_id: category.id,
-            key: 'test.batch.one',
-            language: 'en',
-            value: 'Batch One EN',
-            type: 'text',
-            created_by: testAdminId,
-            updated_by: testAdminId,
-          },
-        ])
-      }
-
-      const result = await AdminContentService.getContentItemsByKeys(
-        ['test.batch.one', 'test.batch.two', 'test.batch.one', 'test.batch.missing'],
-        'vi'
-      )
-
-      expect(result.items).toEqual({
-        'test.batch.one': 'Batch One',
-        'test.batch.two': 'Batch Two',
+    it('returns an empty collection without inventing a count', async () => {
+      queueQuery([])
+      expect(await AdminContentService.getContentItems()).toEqual({
+        items: [],
+        total: 0,
+        readOnly: false,
       })
-      expect(result.missingKeys).toEqual(['test.batch.missing'])
-
-      // Cleanup
-      await supabaseAdmin.from('content_items').delete().like('key', 'test.batch.%')
     })
-
-    it('should return empty result for blank keys', async () => {
-      const result = await AdminContentService.getContentItemsByKeys(['', '   '], 'vi')
-
-      expect(result.items).toEqual({})
-      expect(result.missingKeys).toEqual([])
+    it('maps snake_case fields and dates', async () => {
+      queueQuery([row], null, 8)
+      const result = await AdminContentService.getContentItems()
+      expect(result.total).toBe(8)
+      expect(result.items[0]).toEqual({
+        id: row.id,
+        categoryId: row.category_id,
+        key: row.key,
+        language: row.language,
+        value: row.value,
+        description: row.description,
+        type: row.type,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+        createdBy: row.created_by,
+        updatedBy: row.updated_by,
+        revision: 0,
+      })
+      expect(result.items[0]).not.toHaveProperty('category_id')
+    })
+    it('applies category and language filters', async () => {
+      const query = queueQuery([row], null, 1)
+      await AdminContentService.getContentItems(category.id, 'vi')
+      expect(query.eq).toHaveBeenCalledWith('category_id', category.id)
+      expect(query.eq).toHaveBeenCalledWith('language', 'vi')
+    })
+    it('searches key and value', async () => {
+      const query = queueQuery([])
+      await AdminContentService.getContentItems(undefined, undefined, 'search')
+      expect(query.or).toHaveBeenCalledWith('key.imatch."search",value.imatch."search"')
+    })
+    it.each([
+      [200, 100],
+      [0, 1],
+    ])('clamps limit %i to %i and preserves offset', async (limit, expected) => {
+      const query = queueQuery([])
+      await AdminContentService.getContentItems(undefined, undefined, undefined, limit, 3)
+      expect(query.range).toHaveBeenCalledWith(3, 3 + expected - 1)
+    })
+    it('propagates a database failure', async () => {
+      queueQuery(null, dbFailure)
+      await expect(AdminContentService.getContentItems()).rejects.toMatchObject({
+        code: 'DATABASE_ERROR',
+      })
     })
   })
 
   describe('getContentItem', () => {
-    it('should return null for non-existent item', async () => {
-      const result = await AdminContentService.getContentItem('00000000-0000-0000-0000-000000000000')
-      expect(result).toBeNull()
+    it('returns the item identified by ID', async () => {
+      const query = queueQuery(row)
+      expect(await AdminContentService.getContentItem(row.id)).toMatchObject({
+        id: row.id,
+        key: row.key,
+      })
+      expect(query.eq).toHaveBeenCalledWith('id', row.id)
     })
-
-    it('should return content item by ID', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        const { data: inserted } = await supabaseAdmin
-          .from('content_items')
-          .insert({
-            category_id: category.id,
-            key: 'test.getitem',
-            language: 'vi',
-            value: 'Get Item Test',
-            type: 'text',
-            created_by: testAdminId,
-            updated_by: testAdminId,
-          })
-          .select()
-          .single()
-
-        if (inserted) {
-          const result = await AdminContentService.getContentItem(inserted.id)
-          expect(result).not.toBeNull()
-          expect(result?.id).toBe(inserted.id)
-          expect(result?.key).toBe('test.getitem')
-          expect(result?.value).toBe('Get Item Test')
-
-          // Cleanup
-          await supabaseAdmin.from('content_items').delete().eq('id', inserted.id)
-        }
-      }
+    it.each([null])('returns null for an absent item (%j)', async error => {
+      queueQuery(null, error)
+      expect(await AdminContentService.getContentItem('missing')).toBeNull()
+    })
+    it('does not turn a database outage into not-found', async () => {
+      queueQuery(null, dbFailure)
+      await expect(AdminContentService.getContentItem(row.id)).rejects.toMatchObject({
+        code: 'DATABASE_ERROR',
+      })
     })
   })
 
   describe('createContentItem', () => {
-    it('should create a new content item', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        const result = await AdminContentService.createContentItem(
-          {
-            categoryId: category.id,
-            key: 'test.create',
-            language: 'vi',
-            value: 'Created Item',
-            description: 'Test description',
-            type: 'text',
-          },
-          testAdminId
-        )
-
-        expect(result).toHaveProperty('id')
-        expect(result.key).toBe('test.create')
-        expect(result.value).toBe('Created Item')
-        expect(result.language).toBe('vi')
-        expect(result.createdBy).toBeNull()
-
-        // Cleanup
-        await supabaseAdmin.from('content_items').delete().eq('id', result.id)
-      }
+    it('creates text content with audit actor and maps the saved row', async () => {
+      queueQuery({ id: category.id })
+      const query = queueQuery(row)
+      const result = await AdminContentService.createContentItem(input, 'admin-1')
+      expect(query.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category_id: category.id,
+          key: row.key,
+          type: 'text',
+          created_by: 'admin-1',
+          updated_by: 'admin-1',
+        })
+      )
+      expect(result).toMatchObject({ id: row.id, createdBy: 'admin-1', value: row.value })
+      expect(AuditLogService.logAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'create', resourceId: row.id })
+      )
     })
-
-    it('should throw error for non-existent category', async () => {
-      await expect(
-        AdminContentService.createContentItem(
-          {
-            categoryId: '00000000-0000-0000-0000-000000000000',
-            key: 'test.invalid',
-            language: 'vi',
-            value: 'Invalid',
-          },
-          testAdminId
-        )
-      ).rejects.toThrow('Category not found')
+    it('rejects a missing category', async () => {
+      queueQuery(null)
+      await expect(AdminContentService.createContentItem(input, 'admin-1')).rejects.toThrow(
+        'Category not found'
+      )
+      expect(fromMock).toHaveBeenCalledTimes(1)
     })
-
-    it('should throw error for duplicate key', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        // Create first item
-        const first = await AdminContentService.createContentItem(
-          {
-            categoryId: category.id,
-            key: 'test.duplicate',
-            language: 'vi',
-            value: 'First',
-          },
-          testAdminId
-        )
-
-        // Try to create duplicate
-        await expect(
-          AdminContentService.createContentItem(
-            {
-              categoryId: category.id,
-              key: 'test.duplicate',
-              language: 'vi',
-              value: 'Second',
-            },
-            testAdminId
-          )
-        ).rejects.toThrow('already exists')
-
-        // Cleanup
-        await supabaseAdmin.from('content_items').delete().eq('id', first.id)
-      }
+    it('maps a database uniqueness race to a conflict without auditing', async () => {
+      queueQuery({ id: category.id })
+      queueQuery(null, { code: '23505' })
+      await expect(AdminContentService.createContentItem(input, 'admin-1')).rejects.toMatchObject({
+        code: 'CMS_DUPLICATE',
+        statusCode: 409,
+      })
+      expect(AuditLogService.logAction).not.toHaveBeenCalled()
+    })
+    it('does not audit a failed insert', async () => {
+      queueQuery({ id: category.id })
+      queueQuery(null, dbFailure)
+      await expect(AdminContentService.createContentItem(input, 'admin-1')).rejects.toMatchObject({
+        code: 'DATABASE_ERROR',
+      })
+      expect(AuditLogService.logAction).not.toHaveBeenCalled()
     })
   })
 
   describe('updateContentItem', () => {
-    it('should update a content item', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        const created = await AdminContentService.createContentItem(
-          {
-            categoryId: category.id,
-            key: 'test.update',
-            language: 'vi',
-            value: 'Original Value',
-          },
-          testAdminId
+    it('saves updated value and actor and records before/after in audit', async () => {
+      queueQuery(row)
+      const query = queueQuery({ ...row, value: 'Updated', updated_by: 'admin-2', revision: 1 })
+      expect(
+        await AdminContentService.updateContentItem(
+          row.id,
+          { value: 'Updated', expectedRevision: 0 },
+          'admin-2'
         )
-
-        const updated = await AdminContentService.updateContentItem(
-          created.id,
-          {
-            value: 'Updated Value',
-            description: 'Updated description',
+      ).toMatchObject({ value: 'Updated', updatedBy: 'admin-2' })
+      expect(query.update).toHaveBeenCalledWith(
+        expect.objectContaining({ value: 'Updated', updated_by: 'admin-2' })
+      )
+      expect(AuditLogService.logAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          changes: {
+            old: expect.objectContaining({ value: row.value }),
+            new: expect.objectContaining({ value: 'Updated' }),
           },
-          testAdminId
-        )
-
-        expect(updated.value).toBe('Updated Value')
-        expect(updated.description).toBe('Updated description')
-        expect(updated.updatedBy).toBeNull()
-
-        // Cleanup
-        await supabaseAdmin.from('content_items').delete().eq('id', created.id)
-      }
+        })
+      )
     })
-
-    it('should throw error for non-existent item', async () => {
+    it('rejects a missing item', async () => {
+      queueQuery(null)
       await expect(
         AdminContentService.updateContentItem(
-          '00000000-0000-0000-0000-000000000000',
-          { value: 'Updated' },
-          testAdminId
+          'missing',
+          { value: 'Updated', expectedRevision: 0 },
+          'admin-1'
         )
       ).rejects.toThrow('not found')
+    })
+    it('propagates an update failure without auditing success', async () => {
+      queueQuery(row)
+      queueQuery(null, dbFailure)
+      await expect(
+        AdminContentService.updateContentItem(
+          row.id,
+          { value: 'Updated', expectedRevision: 0 },
+          'admin-1'
+        )
+      ).rejects.toThrow()
+      expect(AuditLogService.logAction).not.toHaveBeenCalled()
     })
   })
 
   describe('deleteContentItem', () => {
-    it('should delete a content item', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        const created = await AdminContentService.createContentItem(
-          {
-            categoryId: category.id,
-            key: 'test.delete',
-            language: 'vi',
-            value: 'To Delete',
-          },
-          testAdminId
-        )
-
-        await AdminContentService.deleteContentItem(created.id, testAdminId)
-
-        const result = await AdminContentService.getContentItem(created.id)
-        expect(result).toBeNull()
-      }
+    it('deletes only the requested item and audits it', async () => {
+      queueQuery(row)
+      const query = queueQuery({ id: row.id })
+      await AdminContentService.deleteContentItem(row.id, 'admin-1', 0)
+      expect(query.delete).toHaveBeenCalledTimes(1)
+      expect(query.eq).toHaveBeenCalledWith('id', row.id)
+      expect(AuditLogService.logAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'delete', resourceId: row.id })
+      )
     })
-
-    it('should throw error for non-existent item', async () => {
+    it('rejects a missing item without deleting anything', async () => {
+      queueQuery(null)
+      await expect(AdminContentService.deleteContentItem('missing', 'admin-1', 0)).rejects.toThrow(
+        'not found'
+      )
+      expect(fromMock).toHaveBeenCalledTimes(1)
+    })
+    it('propagates delete failures', async () => {
+      queueQuery(row)
+      queueQuery(null, dbFailure)
       await expect(
-        AdminContentService.deleteContentItem('00000000-0000-0000-0000-000000000000', testAdminId)
-      ).rejects.toThrow('not found')
+        AdminContentService.deleteContentItem(row.id, 'admin-1', 0)
+      ).rejects.toMatchObject({ code: 'DATABASE_ERROR' })
     })
   })
 
   describe('getCategories', () => {
-    it('should return all categories', async () => {
-      const result = await AdminContentService.getCategories()
-      expect(Array.isArray(result)).toBe(true)
-      expect(result.length).toBeGreaterThan(0)
-      expect(result[0]).toHaveProperty('id')
-      expect(result[0]).toHaveProperty('name')
-      expect(result[0]).toHaveProperty('displayOrder')
+    it('requests display order and maps category fields', async () => {
+      const query = queueQuery([category])
+      expect(await AdminContentService.getCategories()).toEqual([
+        expect.objectContaining({ name: 'test', displayOrder: 1 }),
+      ])
+      expect(query.order).toHaveBeenCalledWith('display_order')
     })
-
-    it('should return categories ordered by displayOrder', async () => {
-      const result = await AdminContentService.getCategories()
-      for (let i = 1; i < result.length; i++) {
-        expect(result[i].displayOrder).toBeGreaterThanOrEqual(result[i - 1].displayOrder)
-      }
+    it('propagates failures', async () => {
+      queueQuery(null, dbFailure)
+      await expect(AdminContentService.getCategories()).rejects.toMatchObject({
+        code: 'DATABASE_ERROR',
+      })
     })
   })
 
   describe('exportContent', () => {
-    it('should export content for a language', async () => {
-      const result = await AdminContentService.exportContent('vi')
-      expect(result).toHaveProperty('version')
-      expect(result).toHaveProperty('language')
-      expect(result).toHaveProperty('exportedAt')
-      expect(result).toHaveProperty('categories')
-      expect(result.language).toBe('vi')
-      expect(typeof result.categories).toBe('object')
-    })
-
-    it('should export content with correct structure', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id, name')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        const created = await AdminContentService.createContentItem(
-          {
-            categoryId: category.id,
-            key: 'test.export',
-            language: 'vi',
-            value: 'Export Test',
-          },
-          testAdminId
-        )
-
-        const result = await AdminContentService.exportContent('vi')
-        expect(result.categories['test']).toBeDefined()
-        expect(result.categories['test']['test.export']).toBe('Export Test')
-
-        // Cleanup
-        await supabaseAdmin.from('content_items').delete().eq('id', created.id)
-      }
-    })
-  })
-
-  describe('importContent', () => {
-    it('should import content items', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        const result = await AdminContentService.importContent(
-          {
-            version: '1.0',
-            language: 'vi',
-            categories: {
-              test: {
-                'test.import': 'Imported Content',
-              },
-            },
-          },
-          testAdminId
-        )
-
-        expect(result.imported).toBeGreaterThan(0)
-        expect(result.errors.length).toBe(0)
-
-        // Verify imported item
-        const items = await AdminContentService.getContentItems(category.id, 'vi')
-        expect(items.items.some((item) => item.key === 'test.import')).toBe(true)
-
-        // Cleanup
-        await supabaseAdmin.from('content_items').delete().eq('key', 'test.import')
-      }
-    })
-
-    it('should handle import errors gracefully', async () => {
-      // Test importing with a non-existent category - service should auto-create it
-      const result = await AdminContentService.importContent(
-        {
-          version: '1.0',
-          language: 'vi',
-          categories: {
-            nonexistent: {
-              'test.item': 'Test',
-            },
-          },
+    it('filters language and groups values by category', async () => {
+      const query = queueQuery([{ ...row, content_categories: { name: 'test' } }], null, 1)
+      expect(await AdminContentService.exportContent('vi')).toEqual({
+        version: '2.0',
+        language: 'vi',
+        exportedAt: expect.any(String),
+        categories: {
+          test: { [row.key]: { value: row.value, type: row.type, description: row.description } },
         },
-        testAdminId
+      })
+      expect(query.eq).toHaveBeenCalledWith('language', 'vi')
+    })
+    it('propagates export failures', async () => {
+      queueQuery(null, dbFailure)
+      await expect(AdminContentService.exportContent('vi')).rejects.toMatchObject({
+        code: 'DATABASE_ERROR',
+      })
+    })
+  })
+
+  describe('atomic importContent', () => {
+    const payload = {
+      version: '1.0',
+      language: 'vi' as const,
+      categories: { test: { [row.key]: row.value } },
+    }
+    it('uses one transaction RPC after readiness and logs only a matching committed result', async () => {
+      mockImportResult({ data: { imported: 1, language: 'vi' }, error: null })
+      await expect(AdminContentService.importContent(payload, 'admin')).resolves.toEqual({
+        imported: 1,
+        errors: [],
+      })
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('import_cms_content_atomically', {
+        p_actor_id: 'admin',
+        p_language: 'vi',
+        p_items: [{ category: 'test', key: row.key, value: row.value }],
+      })
+      expect(fromMock).not.toHaveBeenCalled()
+      expect(AuditLogService.logAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'import' })
       )
-
-      // Service auto-creates missing categories, so this should succeed
-      expect(result.imported).toBeGreaterThan(0)
-      expect(result.errors.length).toBe(0)
-
-      // Verify category was created
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('*')
-        .eq('name', 'nonexistent')
-        .single()
-
-      expect(category).toBeDefined()
-      expect(category?.name).toBe('nonexistent')
     })
-
-    it('should update existing items on import', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        // Create initial item
-        const created = await AdminContentService.createContentItem(
-          {
-            categoryId: category.id,
-            key: 'test.reimport',
-            language: 'vi',
-            value: 'Original',
-          },
-          testAdminId
-        )
-
-        // Import with updated value
-        const result = await AdminContentService.importContent(
-          {
-            version: '1.0',
-            language: 'vi',
-            categories: {
-              test: {
-                'test.reimport': 'Updated via Import',
-              },
-            },
-          },
-          testAdminId
-        )
-
-        expect(result.imported).toBeGreaterThan(0)
-
-        // Verify updated value
-        const updated = await AdminContentService.getContentItem(created.id)
-        expect(updated?.value).toBe('Updated via Import')
-
-        // Cleanup
-        await supabaseAdmin.from('content_items').delete().eq('id', created.id)
+    it.each([null, { imported: 0, language: 'vi' }, { imported: 1, language: 'en' }])(
+      'rejects an unconfirmed RPC result %j',
+      async data => {
+        mockImportResult({ data, error: null })
+        await expect(AdminContentService.importContent(payload, 'admin')).rejects.toMatchObject({
+          code: 'CMS_IMPORT_UNCONFIRMED',
+        })
+        expect(AuditLogService.logAction).not.toHaveBeenCalled()
       }
+    )
+    it('requires the schema and never falls back to individual writes', async () => {
+      jest
+        .mocked(supabaseAdmin.rpc)
+        .mockResolvedValue({ data: null, error: { code: 'PGRST202' } } as never)
+      await expect(AdminContentService.importContent(payload, 'admin')).rejects.toMatchObject({
+        statusCode: 503,
+        code: 'SCHEMA_NOT_READY',
+      })
+      expect(fromMock).not.toHaveBeenCalled()
     })
-  })
-
-  describe('Error Handling', () => {
-    it('should handle database errors gracefully', async () => {
-      // This test verifies error handling through actual database operations
-      // Attempting to get a non-existent item should return null
-      const result = await AdminContentService.getContentItem('00000000-0000-0000-0000-000000000000')
-      expect(result).toBeNull()
-    })
-  })
-
-  describe('Data Transformation', () => {
-    it('should transform snake_case to camelCase', async () => {
-      const { data: category } = await supabaseAdmin
-        .from('content_categories')
-        .select('id')
-        .eq('name', 'test')
-        .single()
-
-      if (category) {
-        const created = await AdminContentService.createContentItem(
-          {
-            categoryId: category.id,
-            key: 'test.transform',
-            language: 'vi',
-            value: 'Transform Test',
-          },
-          testAdminId
+    it('does not retry a rejected transport', async () => {
+      jest
+        .mocked(supabaseAdmin.rpc)
+        .mockImplementation(
+          name =>
+            (name === 'loopy_schema_status'
+              ? Promise.resolve({ data: { cms: true }, error: null })
+              : Promise.reject(new Error('Offline'))) as never
         )
-
-        expect(created).toHaveProperty('categoryId')
-        expect(created).toHaveProperty('createdAt')
-        expect(created).toHaveProperty('updatedAt')
-        expect(created).toHaveProperty('createdBy')
-        expect(created).toHaveProperty('updatedBy')
-        expect(created).not.toHaveProperty('category_id')
-        expect(created).not.toHaveProperty('created_at')
-
-        // Cleanup
-        await supabaseAdmin.from('content_items').delete().eq('id', created.id)
-      }
+      await expect(AdminContentService.importContent(payload, 'admin')).rejects.toMatchObject({
+        code: 'CMS_IMPORT_UNCONFIRMED',
+      })
+      expect(
+        jest
+          .mocked(supabaseAdmin.rpc)
+          .mock.calls.filter(([name]) => name === 'import_cms_content_atomically')
+      ).toHaveLength(1)
     })
   })
 })

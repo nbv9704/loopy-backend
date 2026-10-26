@@ -2,15 +2,27 @@ import { z } from 'zod'
 
 const difficulty = z.enum(['easy', 'medium', 'hard'])
 const visibility = z.enum(['public', 'private', 'unlisted', 'official'])
+const practiceSetStatus = z.enum(['draft', 'published', 'archived'])
 const questionType = z.enum(['true_false', 'multiple_choice', 'multiple_select', 'fill_blank'])
+const setIdParams = z.object({
+  setId: z.guid(),
+})
 
 const requirementSchema = z
   .object({
     type: z.enum(['completed_lessons_count']).optional(),
-    languageId: z.string().min(1).optional(),
+    languageId: z.string().trim().min(1).optional(),
     count: z.number().int().min(1).max(999).optional(),
   })
-  .passthrough()
+  .strict()
+  .refine(
+    value =>
+      !Object.keys(value).length ||
+      (value.type === 'completed_lessons_count' &&
+        Boolean(value.languageId) &&
+        value.count !== undefined),
+    'Requirements cần đủ type, languageId và count hợp lệ.'
+  )
   .optional()
 
 const questionSchema = z.object({
@@ -20,7 +32,7 @@ const questionSchema = z.object({
   options: z.array(z.string().trim().min(1)).max(12).optional(),
   correctAnswer: z.string().trim().min(1).optional(),
   starterCode: z.string().max(20000).optional(),
-  testCases: z.array(z.record(z.any())).max(30).optional(),
+  testCases: z.array(z.record(z.string(), z.any())).max(30).optional(),
   solutionCode: z.string().max(20000).optional(),
   explanation: z.string().max(5000).optional(),
   points: z.number().int().min(1).max(100).optional(),
@@ -37,15 +49,15 @@ export const practiceSchemas = {
       includeQuestions: z
         .enum(['true', 'false'])
         .optional()
-        .transform((value) => value === 'true'),
+        .transform(value => value === 'true'),
       mine: z
         .enum(['true', 'false'])
         .optional()
-        .transform((value) => value === 'true'),
+        .transform(value => value === 'true'),
       official: z
         .enum(['true', 'false'])
         .optional()
-        .transform((value) => value === 'true'),
+        .transform(value => value === 'true'),
       limit: z.coerce.number().int().min(1).max(50).optional(),
       offset: z.coerce.number().int().min(0).optional(),
     }),
@@ -53,7 +65,7 @@ export const practiceSchemas = {
 
   getSet: z.object({
     params: z.object({
-      setId: z.string().uuid(),
+      setId: z.guid(),
     }),
   }),
 
@@ -72,16 +84,14 @@ export const practiceSchemas = {
       languageId: z.string().trim().min(1).optional(),
       difficulty: difficulty.optional(),
       visibility: visibility.optional(),
-      status: z.enum(['draft', 'published']).optional(),
+      status: practiceSetStatus.optional(),
       requirements: requirementSchema,
       questions: z.array(questionSchema).min(1).max(30),
     }),
   }),
 
   updateSet: z.object({
-    params: z.object({
-      setId: z.string().uuid(),
-    }),
+    params: setIdParams,
     body: z.object({
       title: z.string().trim().min(1).max(160),
       description: z.string().trim().max(2000).optional(),
@@ -89,32 +99,66 @@ export const practiceSchemas = {
       languageId: z.string().trim().min(1).optional(),
       difficulty: difficulty.optional(),
       visibility: visibility.optional(),
-      status: z.enum(['draft', 'published']).optional(),
+      status: practiceSetStatus.optional(),
       requirements: requirementSchema,
       questions: z.array(questionSchema).min(1).max(30),
     }),
   }),
 
   deleteSet: z.object({
-    params: z.object({
-      setId: z.string().uuid(),
-    }),
+    params: setIdParams,
+    query: z.object({ expectedStatus: practiceSetStatus.optional() }),
+  }),
+
+  adminArchiveSet: z.object({
+    params: setIdParams,
+    query: z.object({ expectedStatus: practiceSetStatus }),
   }),
 
   startAttempt: z.object({
-    params: z.object({
-      setId: z.string().uuid(),
-    }),
+    params: setIdParams,
   }),
 
   submit: z.object({
     params: z.object({
-      attemptId: z.string().uuid(),
-      questionId: z.string().uuid(),
+      attemptId: z.guid(),
+      questionId: z.guid(),
     }),
     body: z.object({
-      selectedAnswer: z.string().optional(),
+      selectedAnswer: z.string().max(5000).optional(),
       code: z.string().max(20000).optional(),
+    }),
+  }),
+
+  adminListSets: z.object({
+    query: z.object({
+      languageId: z.string().optional(),
+      difficulty: difficulty.optional(),
+      status: z.enum(['active', 'draft', 'published', 'archived', 'all']).default('active'),
+      visibility: visibility.optional(),
+      createdBy: z.guid().optional(),
+      limit: z.coerce.number().int().min(1).max(50).optional(),
+      offset: z.coerce.number().int().min(0).optional(),
+    }),
+  }),
+
+  setParams: z.object({
+    params: setIdParams,
+  }),
+
+  updateStatus: z.object({
+    params: setIdParams,
+    body: z.object({
+      status: practiceSetStatus,
+      expectedStatus: practiceSetStatus,
+    }),
+  }),
+
+  updateVisibility: z.object({
+    params: setIdParams,
+    body: z.object({
+      visibility,
+      expectedVisibility: visibility,
     }),
   }),
 }

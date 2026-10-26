@@ -1,22 +1,25 @@
 import dotenv from 'dotenv'
+import { validateEnvironment } from './environment'
 
 dotenv.config()
+const environment = validateEnvironment(process.env)
 
 export const config = {
   // Server
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
-  apiUrl: process.env.API_URL || 'http://localhost:3000',
+  apiUrl: environment.apiUrl,
 
   // Supabase
   supabase: {
-    url: process.env.SUPABASE_URL || '',
+    url: environment.supabaseUrl,
     anonKey: process.env.SUPABASE_ANON_KEY || '',
     serviceKey: process.env.SUPABASE_SERVICE_KEY || '',
   },
 
   // CORS
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  frontendUrl: environment.frontendUrl,
+  allowedOrigins: environment.allowedOrigins,
 
   // Code Execution
   codeExecution: {
@@ -75,25 +78,10 @@ export const config = {
 
   // Glot.io API Configuration (temporary fallback runner)
   glot: {
-    apiUrl: process.env.GLOT_API_URL || 'https://glot.io/api/run',
+    enabled: process.env.GLOT_ENABLED === undefined
+      ? Boolean(process.env.GLOT_API_TOKEN)
+      : process.env.GLOT_ENABLED === 'true',
+    apiUrl: process.env.GLOT_API_URL || 'https://glot.io/api/mux',
     apiToken: process.env.GLOT_API_TOKEN || '',
   },
 } as const
-
-// Validate required environment variables
-const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_KEY']
-
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    throw new Error(`Missing required environment variable: ${envVar}`)
-  }
-}
-
-if (config.nodeEnv === 'production') {
-  if (!process.env.ADMIN_SESSION_SECRET) {
-    throw new Error('ADMIN_SESSION_SECRET must be set in production')
-  }
-  if (!process.env.REDIS_URL) {
-    throw new Error('REDIS_URL must be set in production')
-  }
-}

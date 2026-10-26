@@ -218,7 +218,11 @@ describe('Content Schemas', () => {
   describe('UpdateContentItemSchema', () => {
     it('should validate a valid update request', () => {
       const validRequest = {
+        params: {
+          id: '123e4567-e89b-12d3-a456-426614174000',
+        },
         body: {
+          expectedRevision: 0,
           value: 'Học tập cập nhật',
           description: 'Updated description',
           type: 'markdown',
@@ -231,9 +235,7 @@ describe('Content Schemas', () => {
 
     it('should reject empty value', () => {
       const invalidRequest = {
-        body: {
-          value: '',
-        },
+        body: { expectedRevision: 0, value: '' },
       }
 
       const result = contentSchemas.updateContentItem.safeParse(invalidRequest)
@@ -242,9 +244,7 @@ describe('Content Schemas', () => {
 
     it('should reject value exceeding 5000 characters', () => {
       const invalidRequest = {
-        body: {
-          value: 'a'.repeat(5001),
-        },
+        body: { expectedRevision: 0, value: 'a'.repeat(5001) },
       }
 
       const result = contentSchemas.updateContentItem.safeParse(invalidRequest)
@@ -253,9 +253,10 @@ describe('Content Schemas', () => {
 
     it('should allow partial updates', () => {
       const validRequest = {
-        body: {
-          value: 'Học tập cập nhật',
+        params: {
+          id: '123e4567-e89b-12d3-a456-426614174000',
         },
+        body: { expectedRevision: 0, value: 'Học tập cập nhật' },
       }
 
       const result = contentSchemas.updateContentItem.safeParse(validRequest)
@@ -264,10 +265,7 @@ describe('Content Schemas', () => {
 
     it('should reject invalid type', () => {
       const invalidRequest = {
-        body: {
-          value: 'Học tập',
-          type: 'invalid',
-        },
+        body: { expectedRevision: 0, value: 'Học tập', type: 'invalid' },
       }
 
       const result = contentSchemas.updateContentItem.safeParse(invalidRequest)
@@ -484,7 +482,7 @@ describe('Content Schemas', () => {
       const result = contentSchemas.contentItem.safeParse(invalidItem)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors[0].message).toContain('UUID')
+        expect(result.error.issues[0].message).toContain('UUID')
       }
     })
 
@@ -503,7 +501,7 @@ describe('Content Schemas', () => {
       const result = contentSchemas.contentItem.safeParse(invalidItem)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors[0].message).toContain('vi hoặc en')
+        expect(result.error.issues[0].message).toContain('vi hoặc en')
       }
     })
 
@@ -520,7 +518,7 @@ describe('Content Schemas', () => {
       const result = contentSchemas.createContentItem.safeParse(invalidRequest)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors[0].message).toContain('không được để trống')
+        expect(result.error.issues[0].message).toContain('không được để trống')
       }
     })
 
@@ -537,7 +535,7 @@ describe('Content Schemas', () => {
       const result = contentSchemas.createContentItem.safeParse(invalidRequest)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors[0].message).toContain('5000')
+        expect(result.error.issues[0].message).toContain('5000')
       }
     })
   })

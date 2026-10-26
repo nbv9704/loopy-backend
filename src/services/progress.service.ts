@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../db/supabase'
+import { errors } from '../middleware/errorHandler'
 
 /**
  * Progress Service
@@ -17,6 +18,51 @@ interface StreakResult {
   longest: number
 }
 
+const STUDY_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+const DAY_IN_MS = 24 * 60 * 60 * 1000
+
+export interface UserStreak {
+  current_streak: number
+  longest_streak: number
+  last_activity_date?: string | null
+}
+
+export const getStudyDateKey = (date = new Date()): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: STUDY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = parts.find(part => part.type === 'year')?.value
+  const month = parts.find(part => part.type === 'month')?.value
+  const day = parts.find(part => part.type === 'day')?.value
+
+  return `${year}-${month}-${day}`
+}
+
+const normalizeDateKey = (value: string | Date): string => {
+  if (value instanceof Date) {
+    return getStudyDateKey(value)
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value
+  }
+
+  return getStudyDateKey(new Date(value))
+}
+
+const dateKeyToDayNumber = (dateKey: string): number => {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return Math.floor(Date.UTC(year, month - 1, day) / DAY_IN_MS)
+}
+
+const getDayDiff = (laterDateKey: string, earlierDateKey: string): number => {
+  return dateKeyToDayNumber(laterDateKey) - dateKeyToDayNumber(earlierDateKey)
+}
+
 /**
  * Calculate user's learning streak based on completion dates
  * Streak = consecutive days with at least one lesson completed
@@ -24,14 +70,15 @@ interface StreakResult {
  * @param completedLessons - Array of completed lessons with completion dates
  * @returns Object containing current streak and longest streak
  */
-export const calculateUserStreak = (completedLessons: CompletedLesson[]): StreakResult => {
+export const calculateUserStreak = (
+  completedLessons: CompletedLesson[],
+  todayDateKey = getStudyDateKey()
+): StreakResult => {
   // Extract and normalize completion dates
   const completionDates = completedLessons
     .filter(p => p.completed_at)
-    .map(p => {
-      const date = new Date(p.completed_at!)
-      return date.toISOString().split('T')[0] // Get YYYY-MM-DD
-    })
+    .map(p => normalizeDateKey(p.completed_at!))
+    .filter(date => date <= todayDateKey)
     .sort()
     .reverse() // Most recent first
 
@@ -42,18 +89,12 @@ export const calculateUserStreak = (completedLessons: CompletedLesson[]): Streak
   let currentStreak = 0
   let longestStreak = 0
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
   if (uniqueDates.length === 0) {
     return { current: 0, longest: 0 }
   }
 
-  const mostRecentDate = new Date(uniqueDates[0])
-  mostRecentDate.setHours(0, 0, 0, 0)
-
   // Check if most recent completion is today or yesterday
-  const daysDiff = Math.floor((today.getTime() - mostRecentDate.getTime()) / (1000 * 60 * 60 * 24))
+  const daysDiff = getDayDiff(todayDateKey, uniqueDates[0])
 
   if (daysDiff > 1) {
     // Streak is broken
@@ -64,12 +105,7 @@ export const calculateUserStreak = (completedLessons: CompletedLesson[]): Streak
   currentStreak = 1
 
   for (let i = 1; i < uniqueDates.length; i++) {
-    const currentDate = new Date(uniqueDates[i - 1])
-    const prevDate = new Date(uniqueDates[i])
-    currentDate.setHours(0, 0, 0, 0)
-    prevDate.setHours(0, 0, 0, 0)
-
-    const diff = Math.floor((currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24))
+    const diff = getDayDiff(uniqueDates[i - 1], uniqueDates[i])
 
     if (diff === 1) {
       currentStreak++
@@ -96,12 +132,7 @@ function calculateLongestStreakInHistory(uniqueDates: string[]): number {
   let tempStreak = 1
 
   for (let i = 1; i < uniqueDates.length; i++) {
-    const currentDate = new Date(uniqueDates[i - 1])
-    const prevDate = new Date(uniqueDates[i])
-    currentDate.setHours(0, 0, 0, 0)
-    prevDate.setHours(0, 0, 0, 0)
-
-    const diff = Math.floor((currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24))
+    const diff = getDayDiff(uniqueDates[i - 1], uniqueDates[i])
 
     if (diff === 1) {
       tempStreak++
@@ -112,6 +143,47 @@ function calculateLongestStreakInHistory(uniqueDates: string[]): number {
   }
 
   return longestStreak
+}
+
+export const normalizeUserStreak = (
+  streak?: Partial<UserStreak> | null,
+  todayDateKey = getStudyDateKey()
+): UserStreak => {
+  const longestStreak = streak?.longest_streak || 0
+  const currentStreak = streak?.current_streak || 0
+  const lastActivityDate = streak?.last_activity_date
+    ? normalizeDateKey(streak.last_activity_date)
+    : null
+
+  if (!lastActivityDate || currentStreak <= 0) {
+    return {
+      current_streak: 0,
+      longest_streak: longestStreak,
+      last_activity_date: lastActivityDate,
+    }
+  }
+
+  const daysSinceActivity = getDayDiff(todayDateKey, lastActivityDate)
+  const isStillActive = daysSinceActivity >= 0 && daysSinceActivity <= 1
+
+  return {
+    current_streak: isStillActive ? currentStreak : 0,
+    longest_streak: longestStreak,
+    last_activity_date: lastActivityDate,
+  }
+}
+
+export const getFreshUserStreak = async (userId: string): Promise<UserStreak> => {
+  const { data: streak, error } = await supabaseAdmin
+    .from('user_streaks')
+    .select('current_streak, longest_streak, last_activity_date')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) throw errors.databaseError('Failed to load learning streak')
+
+  // Reading a stale streak must never overwrite a concurrent completion.
+  return normalizeUserStreak(streak)
 }
 
 /**
@@ -150,69 +222,70 @@ export const groupProgressByLanguage = (progressData: any[]): Record<string, any
 export const handleGamification = async (
   userId: string,
   _lessonId: string,
-  isFirstTime: boolean = true
+  isFirstTime: boolean = true,
+  rewardsAlreadyRecorded: boolean = false
 ): Promise<{ pointsEarned: number; newBadges: any[] }> => {
   const POINTS_PER_LESSON = 100
   const newBadges: any[] = []
 
   try {
     let pointsEarned = 0
-    const todayDateStr = new Date().toISOString().split('T')[0]
+    const todayDateStr = getStudyDateKey()
 
-    // 1. Log to user daily activity (always increment completed count, but only award points if first time)
-    const { data: existingActivity } = await supabaseAdmin
-      .from('user_daily_activity')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('activity_date', todayDateStr)
-      .maybeSingle()
+    if (!isFirstTime) {
+      await getFreshUserStreak(userId)
+      return { pointsEarned, newBadges }
+    }
 
-    const todayCompletedCount = (existingActivity?.lessons_completed || 0) + 1
-    const todayPoints = (existingActivity?.points_earned || 0) + (isFirstTime ? POINTS_PER_LESSON : 0)
+    pointsEarned = POINTS_PER_LESSON
 
-    await supabaseAdmin
-      .from('user_daily_activity')
-      .upsert(
-        {
-          user_id: userId,
-          activity_date: todayDateStr,
-          lessons_completed: todayCompletedCount,
-          points_earned: todayPoints,
-        },
-        { onConflict: 'user_id,activity_date' }
-      )
+    if (!rewardsAlreadyRecorded) {
+      const { data: existingActivity } = await supabaseAdmin
+        .from('user_daily_activity')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('activity_date', todayDateStr)
+        .maybeSingle()
 
-    if (isFirstTime) {
-      pointsEarned = POINTS_PER_LESSON
+      await supabaseAdmin
+        .from('user_daily_activity')
+        .upsert(
+          {
+            user_id: userId,
+            activity_date: todayDateStr,
+            lessons_completed: (existingActivity?.lessons_completed || 0) + 1,
+            points_earned: (existingActivity?.points_earned || 0) + POINTS_PER_LESSON,
+          },
+          { onConflict: 'user_id,activity_date' }
+        )
 
-      // Increment user points in profile
       const { data: profile } = await supabaseAdmin
         .from('user_profiles')
         .select('points')
         .eq('id', userId)
         .single()
 
-      const currentPoints = (profile?.points || 0) + POINTS_PER_LESSON
-
       await supabaseAdmin
         .from('user_profiles')
-        .update({ points: currentPoints })
+        .update({ points: (profile?.points || 0) + POINTS_PER_LESSON })
         .eq('id', userId)
     }
 
     // 2. Always update/re-calculate User Streaks to maintain active daily study streak
     // Retrieve all active study days from user_daily_activity
-    const { data: activities } = await supabaseAdmin
+    const { data: activities, error: activitiesError } = await supabaseAdmin
       .from('user_daily_activity')
       .select('activity_date')
       .eq('user_id', userId)
       .gt('lessons_completed', 0)
 
+    if (activitiesError || !activities) throw errors.databaseError('Failed to load study history')
+
     const activityDates = (activities || []).map((act: any) => ({
       completed_at: act.activity_date,
     }))
 
-    const streakResult = calculateUserStreak(activityDates)
+    const streakResult = calculateUserStreak(activityDates, todayDateStr)
 
     await supabaseAdmin
       .from('user_streaks')
@@ -244,9 +317,23 @@ export const handleGamification = async (
       if (badge) newBadges.push(badge)
     }
 
+    if (streakResult.current >= 7) {
+      const { data: badge } = await supabaseAdmin
+        .from('user_badges')
+        .upsert(
+          { user_id: userId, badge_id: 'streak-7' },
+          { onConflict: 'user_id,badge_id', ignoreDuplicates: true }
+        )
+        .select('badges(*)')
+        .maybeSingle()
+
+      if (badge) newBadges.push(badge)
+    }
+
     return { pointsEarned, newBadges }
   } catch (error) {
     console.error('Gamification error:', error)
-    return { pointsEarned: 0, newBadges: [] }
+    // Optional rewards metadata cannot undo points committed by complete_lesson_atomically.
+    return { pointsEarned: rewardsAlreadyRecorded && isFirstTime ? POINTS_PER_LESSON : 0, newBadges: [] }
   }
 }

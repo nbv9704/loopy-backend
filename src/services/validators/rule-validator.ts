@@ -1,4 +1,5 @@
 import { normalizeCode } from './normalize-code'
+import { z } from 'zod'
 
 export interface SubCheck {
   label: string
@@ -28,6 +29,30 @@ export interface ValidationResult {
   }>
 }
 
+const nonBlankString = z.string().refine(value => value.trim().length > 0)
+const predicateSchema = z.object({
+  exact: nonBlankString.optional(),
+  regex: nonBlankString.optional(),
+  required: z.array(nonBlankString).optional(),
+  forbidden: z.array(nonBlankString).optional(),
+})
+const hasPredicate = (rule: ValidationRules): boolean =>
+  Boolean(rule.exact || rule.regex || rule.required?.length || rule.forbidden?.length)
+const rulesSchema = predicateSchema
+  .extend({
+    checks: z
+      .array(
+        predicateSchema
+          .extend({
+            label: nonBlankString,
+            message: z.string().optional(),
+          })
+          .refine(hasPredicate)
+      )
+      .optional(),
+  })
+  .refine(rule => hasPredicate(rule) || Boolean(rule.checks?.length))
+
 /**
  * Validate code against deterministic rules.
  */
@@ -36,6 +61,21 @@ export function validateRules(
   rules: ValidationRules,
   language: string
 ): ValidationResult {
+  const configuration = rulesSchema.safeParse(rules)
+  if (!configuration.success) {
+    return {
+      passed: false,
+      score: 0,
+      checks: [
+        {
+          label: 'Cấu hình kiểm tra chưa hợp lệ',
+          passed: false,
+          message: 'Bài học cần ít nhất một điều kiện kiểm tra hợp lệ. Vui lòng báo admin.',
+        },
+      ],
+    }
+  }
+  rules = configuration.data
   const normalized = normalizeCode(code, language)
   const checks: Array<{ label: string; passed: boolean; message?: string }> = []
   let overallPassed = true
@@ -53,9 +93,9 @@ export function validateRules(
     if (exactVal) {
       const normExact = normalizeCode(exactVal, language)
       if (norm !== normExact) {
-        return { 
-          passed: false, 
-          message: `Code does not match the expected pattern.` 
+        return {
+          passed: false,
+          message: `Code does not match the expected pattern.`,
         }
       }
     }
@@ -66,15 +106,15 @@ export function validateRules(
         const re = new RegExp(regexVal)
         // Check raw code first, if fails try normalized code
         if (!re.test(c) && !re.test(norm)) {
-          return { 
-            passed: false, 
-            message: `Code does not match the required regex pattern.` 
+          return {
+            passed: false,
+            message: `Code does not match the required regex pattern.`,
           }
         }
       } catch (err) {
-        return { 
-          passed: false, 
-          message: `Invalid regex rule configuration.` 
+        return {
+          passed: false,
+          message: `Invalid regex rule configuration.`,
         }
       }
     }
@@ -83,9 +123,9 @@ export function validateRules(
     if (reqVal && reqVal.length > 0) {
       for (const token of reqVal) {
         if (!c.includes(token) && !norm.includes(token)) {
-          return { 
-            passed: false, 
-            message: `Missing required keyword/symbol: "${token}"` 
+          return {
+            passed: false,
+            message: `Missing required keyword/symbol: "${token}"`,
           }
         }
       }
@@ -95,9 +135,9 @@ export function validateRules(
     if (forbVal && forbVal.length > 0) {
       for (const token of forbVal) {
         if (c.includes(token) || norm.includes(token)) {
-          return { 
-            passed: false, 
-            message: `Used forbidden keyword/symbol: "${token}"` 
+          return {
+            passed: false,
+            message: `Used forbidden keyword/symbol: "${token}"`,
           }
         }
       }

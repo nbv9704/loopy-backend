@@ -1,5 +1,7 @@
 import { supabaseAdmin } from '../db/supabase'
 import { logger } from '../utils/logger'
+import { errors } from '../middleware/errorHandler'
+import { confirmEmptyRange } from './empty-range'
 
 export interface AuditLogEntry {
   adminId: string
@@ -55,40 +57,38 @@ export class AuditLogService {
     limit?: number
     offset?: number
   }) {
-    try {
+    const limit = options?.limit ?? 50
+    const offset = options?.offset ?? 0
+    const queryFor = (head = false) => {
       let query = supabaseAdmin
         .from('admin_audit_logs')
-        .select('*', { count: 'exact' })
+        .select('*', { count: 'exact', ...(head ? { head: true } : {}) })
         .order('created_at', { ascending: false })
-
-      if (options?.adminId) {
-        query = query.eq('admin_id', options.adminId)
-      }
-
-      if (options?.action) {
-        query = query.eq('action', options.action)
-      }
-
-      if (options?.resourceType) {
-        query = query.eq('resource_type', options.resourceType)
-      }
-
-      const limit = options?.limit || 50
-      const offset = options?.offset || 0
-
-      query = query.range(offset, offset + limit - 1)
-
-      const { data, count, error } = await query
-
-      if (error) {
-        logger.warn('Error fetching audit logs:', error)
-        return { data: [], count: 0 }
-      }
-
-      return { data: data || [], count: count || 0 }
-    } catch (error) {
-      logger.error('Exception fetching audit logs:', error)
-      return { data: [], count: 0 }
+        .order('id', { ascending: false })
+      if (options?.adminId) query = query.eq('admin_id', options.adminId)
+      if (options?.action) query = query.eq('action', options.action)
+      if (options?.resourceType) query = query.eq('resource_type', options.resourceType)
+      return query
     }
+    const { data, count, error } = await queryFor().range(offset, offset + limit - 1)
+    if (error?.code === 'PGRST103')
+      return {
+        data: [],
+        count: await confirmEmptyRange(
+          offset,
+          () => queryFor(true),
+          'Không tải đủ nhật ký hoạt động. Vui lòng thử lại.'
+        ),
+      }
+    if (
+      error ||
+      !Array.isArray(data) ||
+      count === null ||
+      !Number.isSafeInteger(count) ||
+      count < 0 ||
+      data.length !== Math.min(limit, Math.max(0, count - offset))
+    )
+      throw errors.databaseError('Không tải đủ nhật ký hoạt động. Vui lòng thử lại.')
+    return { data, count }
   }
 }

@@ -1,67 +1,24 @@
 import session from 'express-session'
-import { RedisStore } from 'connect-redis'
-import { createClient } from 'redis'
+import { RequestHandler } from 'express'
 import { config } from '../config'
+import { getAdminSessionCookieOptions } from '../utils/adminSession'
+import { adminSessionStore, sessionStoreUnavailable } from '../services/admin-session-store'
 
-// Initialize Redis client for session store
-let redisClient = null;
-let store = undefined;
-
-if (config.redis.url) {
-  redisClient = createClient({
-    url: config.redis.url,
-    socket: config.redis.url.startsWith('rediss://') 
-      ? {
-          connectTimeout: 30000,
-          tls: true,
-          rejectUnauthorized: process.env.REDIS_REJECT_UNAUTHORIZED !== 'false',
-          reconnectStrategy: retries => Math.min(retries * 100, 3000),
-        }
-      : {
-          connectTimeout: 30000,
-          reconnectStrategy: retries => Math.min(retries * 100, 3000),
-        }
-  })
-
-  redisClient.on('error', (err: any) => {
-    console.error('Session Redis Client Error:', err)
-  })
-
-  redisClient.on('reconnecting', () => {
-    console.warn('Session Redis Client reconnecting...')
-  })
-  
-  // Connect and handle startup errors but do not block startup
-  redisClient.connect().catch((err: any) => {
-    console.error('Session Redis Client Connection Error:', err)
-  })
-  
-  store = new RedisStore({
-    client: redisClient,
-    prefix: 'loopy.session:',
-  })
-} else {
-  if (config.nodeEnv === 'production') {
-    throw new Error('FATAL: REDIS_URL is required in production environment for secure session management!')
-  }
-  console.warn('⚠️ No REDIS_URL provided, falling back to MemoryStore for sessions. This is a security risk in production.')
-}
-
-/**
- * Session middleware configuration for admin dashboard
- * Uses secure HTTP-only cookies with appropriate settings per environment
- */
-export const sessionMiddleware = session({
-  store: store,
+const middleware = session({
+  store: adminSessionStore,
   secret: config.admin.sessionSecret,
   resave: false,
   saveUninitialized: false,
-  proxy: config.nodeEnv === 'production', // Trust proxy in production for secure cookies
+  proxy: config.nodeEnv === 'production',
   cookie: {
-    httpOnly: true,
-    secure: config.nodeEnv === 'production', // HTTPS only in production
+    ...getAdminSessionCookieOptions(),
     maxAge: config.admin.sessionMaxAge,
-    sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
   },
-  name: 'loopy.admin.sid', // Custom session cookie name
+  name: 'loopy.admin.sid',
 })
+
+// Store reads fail as an infrastructure outage, not an expired/invalid user session.
+export const sessionMiddleware: RequestHandler = (req, res, next) => {
+  middleware(req, res, error => next(error ? sessionStoreUnavailable() : undefined))
+}
+export { isSessionStoreReady, closeSessionStore } from '../services/admin-session-store'

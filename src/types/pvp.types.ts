@@ -57,6 +57,9 @@ export interface PvPMatch {
   // Timing
   started_at?: string
   ended_at?: string
+  question_started_at?: string | null
+  question_closed_at?: string | null
+  question_started_index?: number | null
 
   // Winner
   winner_id?: string
@@ -118,6 +121,10 @@ export interface PvPSubmission {
   submission_rank?: number
 
   _correct_answer_id?: string // Internal use for socket feedback
+  _replayed?: boolean
+  _question_index?: number
+  _participant_count?: number
+  _submission_count?: number
 
   submitted_at: string
 }
@@ -201,12 +208,13 @@ export interface ClientToServerEvents {
 // Server -> Client Events
 export interface ServerToClientEvents {
   // Match updates
-  'match:updated': (match: PvPMatch) => void
+  'match:updated': (payload: { match: PvPMatch }) => void
   'match:started': (match: PvPMatch) => void
   'match:question_changed': (payload: {
     match: PvPMatch
     question: PvPQuestion
     timeRemaining: number
+    submission?: PvPSubmission
   }) => void
   'match:completed': (payload: {
     match: PvPMatch
@@ -249,10 +257,7 @@ export interface ServerToClientEvents {
     rank: number
     pointsEarned: number
   }) => void
-  'submission:feedback': (payload: {
-    questionId: string
-    correctAnswerId?: string
-  }) => void
+  'submission:feedback': (payload: { questionId: string; correctAnswerId?: string }) => void
 
   // Reactions
   'reaction:received': (reaction: PvPReaction) => void

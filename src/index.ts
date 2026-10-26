@@ -8,6 +8,9 @@ import { setupSwagger } from './middleware/swagger.middleware'
 import { setupStaticServing } from './utils/staticServing'
 import apiRoutes from './routes'
 import { PvPSocketService } from './services/pvp-socket.service'
+import { closeSessionStore } from './middleware/session'
+import { gradingCacheService } from './services/grading-cache.service'
+import { cacheService } from './services/cache.service'
 
 /**
  * Application entry point
@@ -53,9 +56,21 @@ const server = httpServer.listen(config.port, () => {
 })
 
 // Graceful Shutdown
-const shutdown = () => {
-  logger.info('Signal received: closing HTTP server')
-  server.close(() => process.exit(0))
+let shuttingDown = false
+const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  app.locals.shuttingDown = true
+  logger.info('Signal received: closing HTTP, Socket.IO and Redis resources')
+  const deadline = setTimeout(() => process.exit(1), 10000)
+  deadline.unref()
+  const httpDrained = new Promise<void>(resolve => { server.close(() => resolve()) })
+  const results = await Promise.allSettled([
+    httpDrained, pvpSocketService.close(), closeSessionStore(), gradingCacheService.disconnect(),
+  ])
+  cacheService.close()
+  clearTimeout(deadline)
+  process.exit(results.some(result => result.status === 'rejected') ? 1 : 0)
 }
 
 process.on('SIGTERM', shutdown)
